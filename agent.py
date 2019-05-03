@@ -88,6 +88,7 @@ class one_step_variational_trainer:
         self.total_reward = 0
         self.trajectory = []
         self.Q_ref = np.zeros((self.agent.env.N_obs, self.agent.env.N_act))
+        self.nb_visits = np.zeros(self.agent.env.N_obs)
 
     def init_trainer(self):
         self.total_reward = 0
@@ -108,11 +109,9 @@ class one_step_variational_trainer:
         # return state_probs / sum(state_probs)
 
         #
-        # state_probs = np.ones(self.agent.env.N_obs) * EPSILON/self.agent.env.N_act
-        # state_probs[2] += (1-EPSILON) /2
-        # state_probs[1] += (1-EPSILON) /4
-        # state_probs[3] += (1-EPSILON) /4
-        #return state_probs
+        # state_probs = np.ones(self.agent.env.N_obs) * EPSILON/self.agent.env.N_obs
+        # state_probs[2] += (1-EPSILON)
+        # return state_probs
 
     def KL_diff_loss(self, past_obs, a, new_obs):
         pi = self.agent.softmax(past_obs)[a]
@@ -127,6 +126,7 @@ class one_step_variational_trainer:
         self.trajectory.append(self.agent.env.get_observation())
         while True:
             past_obs, past_action, obs, reward, done = self.agent.step()
+            self.nb_visits[obs] += 1
             #reward *= 0
             self.total_reward += reward
             if done:
@@ -152,23 +152,31 @@ class final_variational_trainer:
         self.Q_KL_diff = np.zeros((self.agent.env.N_obs, self.agent.env.N_act))
         #self.model = np.ones(self.agent.env.N_obs) * 1/self.agent.env.N_obs
         self.nb_visits = np.zeros(self.agent.env.N_obs)
+        self.obs_score = np.zeros(self.agent.env.N_obs)
 
     def init_trainer(self):
         self.total_reward = 0
         self.trajectory = []
 
     def calc_state_probs(self, obs):
-        return self.nb_visits/np.sum(self.nb_visits)
+        #return self.nb_visits/np.sum(self.nb_visits)
+        return self.obs_score/np.sum(self.obs_score)
 
     def calc_ref_probs(self, obs):
-        return np.ones(self.agent.env.N_obs)/self.agent.env.N_obs
+        EPSILON = 1e-6
+        p = np.ones(self.agent.env.N_obs) * EPSILON / self.agent.env.N_obs
+        p[2] += (1 - EPSILON)
+        #p = np.zeros(self.agent.env.N_obs)
+        #p[np.where(self.nb_visits>0)] = 1/np.sum(self.nb_visits>0)
+        return p
 
     def final_KL_diff_loss(self, final_obs):
         #pi = self.agent.softmax(past_obs)[a]
         state_probs = self.calc_state_probs(final_obs)
         ref_probs = self.calc_ref_probs(final_obs)
         #print('KL loss diff :', pi * (1 - pi) * (np.log(state_probs[new_obs]) + 1 ))
-        return np.log(state_probs[final_obs]) + 1 - np.log(ref_probs[final_obs])
+        #return np.log(state_probs[final_obs]) + 1 - np.log(ref_probs[final_obs])
+        return np.log(state_probs[final_obs]) - np.log(ref_probs[final_obs]) + 1
 
     def run_episode(self):
         self.agent.init_env()
@@ -176,18 +184,24 @@ class final_variational_trainer:
         self.trajectory.append(self.agent.env.get_observation())
         while True:
             past_obs, past_action, obs, reward, done = self.agent.step()
-            reward *= 0
+            #reward *= 0
             self.total_reward += reward
             if done:
+                EPS = 1e-3
                 self.nb_visits[obs] += 1
+                self.obs_score *= 1 - EPS
+                self.obs_score[obs] += EPS
                 TD_err = reward - self.Q_ref[past_obs, past_action]
-                TD_err_KL = self.final_KL_diff_loss(obs) #- self.Q_KL_diff[past_obs, past_action]
+                TD_err_KL = self.final_KL_diff_loss(obs) - self.Q_KL_diff[past_obs, past_action]
+                print(obs, TD_err_KL)
             else:
                 TD_err = reward + self.agent.GAMMA * self.agent.softmax_expectation(obs, Q = self.Q_ref) - self.Q_ref[past_obs, past_action]
                 TD_err_KL = self.agent.GAMMA * self.agent.softmax_expectation(obs, Q = self.Q_KL_diff) - self.Q_KL_diff[past_obs, past_action]
-            self.Q_KL_diff[past_obs, past_action] += self.agent.ALPHA * TD_err_KL
-            self.Q_ref[past_obs, past_action] += self.agent.ALPHA * TD_err
-            self.agent.Q[past_obs, past_action] += self.agent.ALPHA * 0.1 * (TD_err - TD_err_KL)
+            self.Q_KL_diff[past_obs, past_action] += self.agent.ALPHA * 0.1 * TD_err_KL
+            self.Q_ref[past_obs, past_action] += self.agent.ALPHA * 0.1 * TD_err
+            #pi = self.agent.softmax(past_obs)[past_action]
+            #self.agent.Q[past_obs, past_action] += self.agent.ALPHA * 0.1 * (TD_err - pi * (1-pi) * TD_err_KL)
+            self.agent.Q[past_obs, past_action] += self.agent.ALPHA * (TD_err - pi * (1-pi)* TD_err_KL)
             self.trajectory.append(obs)
             if done:
                 self.agent.num_episode += 1
