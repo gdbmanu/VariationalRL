@@ -19,10 +19,10 @@ for i in range(N):
     print("Total reward got: %.4f" % trainer.total_reward)
 
 print('Q_ref', trainer.Q_ref)
-print('Q_KL_diff', trainer.Q_KL_diff)
+print('KL_diff', trainer.KL_diff)
 print('Q', agent.Q)
 print(trainer.nb_visits)
-print(sum(trainer.obs_score))
+#print(sum(trainer.obs_score))
 #while not env.is_done():
 #    agent.step(env)
 
