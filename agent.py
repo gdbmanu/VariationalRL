@@ -76,6 +76,7 @@ class Trainer():
         self.nb_visits_final = np.zeros(self.agent.env.N_obs)
         self.obs_score_final = np.zeros(self.agent.env.N_obs)
         self.OBS_LEAK = OBS_LEAK
+        self.mem_V = {}
 
     def init_trial(self):
         self.total_reward = 0
@@ -166,7 +167,12 @@ class Trainer():
             self.agent.Q_ref[past_obs, past_action] += self.agent.ALPHA * self.TD_err_ref(past_obs, past_action, obs, reward, done=done)
             self.agent.Q_var[past_obs, past_action] += self.agent.ALPHA * self.TD_err_var(past_obs, past_action, obs, reward, done=done)
             self.trajectory.append(obs)
+            V = np.zeros(self.agent.env.N_obs)
+
             if done:
+                for s in range(self.agent.env.N_obs):
+                    V[s] = self.agent.softmax_expectation(s)
+                self.mem_V[self.agent.env.get_time()] = V
                 break
 
 class Q_learning_trainer(Trainer):
