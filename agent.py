@@ -14,11 +14,12 @@ class Agent:
         if isTime:
             self.Q_ref = np.zeros((self.env.total_steps, self.env.N_act))  # target Q
             self.Q_var = np.zeros((self.env.total_steps, self.env.N_act))  # variational Q
-            self.KL_diff = np.zeros((self.env.total_steps, self.env.N_act))
+            self.KL = np.zeros((self.env.total_steps, self.env.N_act))
         else:
             self.Q_ref = np.zeros((self.env.N_obs, self.env.N_act))  # target Q
             self.Q_var = np.zeros((self.env.N_obs, self.env.N_act))  # variational Q
-            self.KL_diff = np.zeros((self.env.N_obs, self.env.N_act))
+            self.KL = np.zeros((self.env.N_obs, self.env.N_act))
+
 
     @classmethod
     def timeAgent(cls, env, ALPHA=0.1, GAMMA=0.9, BETA=0.5):
@@ -68,7 +69,7 @@ class Agent:
 
 class Trainer():
 
-    def __init__(self, agent, OBS_LEAK = 1e-3):
+    def __init__(self, agent, OBS_LEAK = 1e-3, EPSILON = 1e-3, ref_prob = 'unif'):
         self.agent = agent
         self.nb_trials = 0
         self.init_trial(update = False)
@@ -77,7 +78,9 @@ class Trainer():
         self.nb_visits_final = np.zeros(self.agent.env.N_obs)
         self.obs_score_final = np.zeros(self.agent.env.N_obs)
         self.OBS_LEAK = OBS_LEAK
+        self.EPSILON = EPSILON
         self.mem_V = {}
+        self.ref_prob = ref_prob
 
     def init_trial(self, update = True):
         if update:
@@ -101,30 +104,33 @@ class Trainer():
         #        state_probs[Environment.next[obs][Environment.direction[a]]] = 1
         # return state_probs / sum(state_probs)
 
-        p = np.zeros(self.agent.env.N_obs)
-        p[np.where(self.nb_visits>0)] = 1/np.sum(self.nb_visits>0)
-        return p
+        if self.ref_prob == 'unif':
+            p = np.zeros(self.agent.env.N_obs)
+            p[np.where(self.nb_visits>0)] = 1/np.sum(self.nb_visits>0)
+            return p
+        else:
+            ref_probs = np.ones(self.agent.env.N_obs) * EPSILON / self.agent.env.N_obs
+            ref_probs[2] += (1 - EPSILON)
+            return ref_probs
 
         # state_probs = np.zeros(self.agent.env.N_obs)
         # for o in range(self.agent.env.N_obs):
         #     state_probs[o] = 7 - o
         # return state_probs / sum(state_probs)
 
-        # ref_probs = np.ones(self.agent.env.N_obs) * EPSILON / self.agent.env.N_obs
-        # ref_probs[2] += (1 - EPSILON)
-        # return ref_probs
+
 
     # agent.KL_diff update
-    def KL_diff(self, past_obs, a, new_obs, done=False):
+    def KL(self, past_obs, a, new_obs, done=False):
         return 0
 
-    def KL_diff_err(self, past_obs, past_action, obs, done = False):
+    def KL_err(self, past_obs, past_action, obs, done = False):
         if done:
-            return self.KL_diff(past_obs, past_action, obs, done = done) - self.agent.KL_diff[past_obs, past_action]
+            return self.KL(past_obs, past_action, obs, done = done) - self.agent.KL[past_obs, past_action]
         else:
             return self.agent.GAMMA * self.agent.softmax_expectation(obs,
-                                                                     Q = self.agent.KL_diff) - \
-                   self.agent.KL_diff[past_obs, past_action]
+                                                                     Q = self.agent.KL) - \
+                   self.agent.KL[past_obs, past_action]
 
     def TD_err_ref(self, past_obs, past_action, obs, reward, done):
         if done:
@@ -136,18 +142,24 @@ class Trainer():
                    self.agent.Q_ref[past_obs, past_action]
 
     # For agent.Q_var update
-    def KL_diff_loss(self, past_obs, a, new_obs, done=False):
+    def KL_diff(self, past_obs, a, new_obs, done=False):
         return 0
 
     def TD_err_var(self, past_obs, past_action, obs, reward, done):
+        if self.agent.Q_ref[past_obs, past_action] == 0:
+            Q_ref = np.zeros((self.agent.env.N_obs, self.agent.env.N_act))
+            Q_var = 0
+        else:
+            Q_ref = self.agent.Q_ref
+            Q_var = self.agent.Q_var[past_obs, past_action]
         if done:
-            return reward - self.agent.Q_var[past_obs, past_action] - self.KL_diff_loss(past_obs, past_action, obs)
+            return reward - self.agent.Q_var[past_obs, past_action] - self.KL_diff(past_obs, past_action, obs)
         else:
             return reward + \
                    self.agent.GAMMA * self.agent.softmax_expectation(obs,
-                                                                     Q=self.agent.Q_ref) - \
-                   self.agent.Q_var[past_obs, past_action] - \
-                   self.KL_diff_loss(past_obs, past_action, obs, done = done)
+                                                                     Q=Q_ref) - \
+                   Q_var - \
+                   self.KL_diff(past_obs, past_action, obs, done = done)
 
     def run_episode(self):
         self.agent.init_env()
@@ -166,7 +178,7 @@ class Trainer():
             if not self.agent.do_reward:
                 reward = 0
             self.total_reward += reward
-            self.agent.KL_diff[past_obs, past_action] += self.agent.ALPHA * self.KL_diff_err(past_obs, past_action, obs, done=done)
+            self.agent.KL[past_obs, past_action] += self.agent.ALPHA * self.KL_err(past_obs, past_action, obs, done=done)
             self.agent.Q_ref[past_obs, past_action] += self.agent.ALPHA * self.TD_err_ref(past_obs, past_action, obs, reward, done=done)
             self.agent.Q_var[past_obs, past_action] += self.agent.ALPHA * self.TD_err_var(past_obs, past_action, obs, reward, done=done)
             self.trajectory.append(obs)
@@ -189,10 +201,10 @@ class one_step_variational_trainer(Trainer):
         super().__init__(agent)
 
     # agent.Q_var update
-    def KL_diff_loss(self, past_obs, a, new_obs, done = False):
+    def KL_diff(self, past_obs, a, new_obs, done = False):
         pi = self.agent.softmax(past_obs)[a]
         state_probs = self.agent.calc_state_probs(past_obs)
-        ref_probs = self.calc_ref_probs(past_obs)
+        ref_probs = self.calc_ref_probs(past_obs, EPSILON=self.EPSILON)
         return (1 - pi) * (np.log(state_probs[new_obs]) + pi / state_probs[new_obs] * 1 - np.log(ref_probs[new_obs]))
 
 class final_variational_trainer(Trainer):
@@ -200,20 +212,20 @@ class final_variational_trainer(Trainer):
     def __init__(self, agent):
         super().__init__(agent)
 
-    def KL_diff(self, past_obs, a, final_obs, done = False):
+    def KL(self, past_obs, a, final_obs, done = False):
         if done:
             state_probs = self.calc_final_state_probs(final_obs)
-            ref_probs = self.calc_ref_probs(final_obs, EPSILON=1e-10)
+            ref_probs = self.calc_ref_probs(final_obs, EPSILON=self.EPSILON)
             return np.log(state_probs[final_obs]) - np.log(ref_probs[final_obs])  #+1
         else:
             #state_probs = self.calc_state_probs(final_obs)
             #ref_probs = self.calc_ref_probs(final_obs, EPSILON=1e-10)
             #return np.log(state_probs[final_obs]) - np.log(ref_probs[final_obs])
-            return self.agent.KL_diff[past_obs, a]
+            return self.agent.KL[past_obs, a]
 
     # agent.Q_var update
-    def KL_diff_loss(self, past_obs, a, final_obs, done = False):
+    def KL_diff(self, past_obs, a, final_obs, done = False):
         pi = self.agent.softmax(past_obs)[a]
-        return (1-pi) * self.KL_diff(past_obs, a, final_obs, done)
+        return (1-pi) * self.KL(past_obs, a, final_obs, done)
 
 
