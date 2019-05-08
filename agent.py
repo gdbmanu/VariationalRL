@@ -70,17 +70,18 @@ class Trainer():
 
     def __init__(self, agent, OBS_LEAK = 1e-3):
         self.agent = agent
-        self.init_trial()
+        self.nb_trials = 0
+        self.init_trial(update = False)
         self.nb_visits = np.zeros(self.agent.env.N_obs)
         self.obs_score = np.zeros(self.agent.env.N_obs)
         self.nb_visits_final = np.zeros(self.agent.env.N_obs)
         self.obs_score_final = np.zeros(self.agent.env.N_obs)
         self.OBS_LEAK = OBS_LEAK
-        self.nb_trials = 0
         self.mem_V = {}
 
-    def init_trial(self):
-        self.nb_trials += 1
+    def init_trial(self, update = True):
+        if update:
+            self.nb_trials += 1
         self.total_reward = 0
         self.trajectory = []
 
