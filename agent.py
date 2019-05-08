@@ -14,16 +14,15 @@ class Agent:
         if isTime:
             self.Q_ref = np.zeros((self.env.total_steps, self.env.N_act))  # target Q
             self.Q_var = np.zeros((self.env.total_steps, self.env.N_act))  # variational Q
-            self.KL = np.zeros((self.env.total_steps, self.env.N_act))
         else:
             self.Q_ref = np.zeros((self.env.N_obs, self.env.N_act))  # target Q
             self.Q_var = np.zeros((self.env.N_obs, self.env.N_act))  # variational Q
-            self.KL = np.zeros((self.env.N_obs, self.env.N_act))
+        self.KL = np.zeros((self.env.N_obs, self.env.N_act))
 
 
     @classmethod
-    def timeAgent(cls, env, ALPHA=0.1, GAMMA=0.9, BETA=0.5):
-        return cls(env, ALPHA=ALPHA, GAMMA=GAMMA, BETA=BETA, isTime = True)
+    def timeAgent(cls, env, ALPHA=0.1, GAMMA=0.9, BETA=0.5, do_reward=False):
+        return cls(env, ALPHA=ALPHA, GAMMA=GAMMA, BETA=BETA, isTime=True, do_reward=do_reward)
 
     def init_env(self, total_steps=10):
         self.env.env_initialize()
@@ -55,7 +54,7 @@ class Agent:
             return np.dot(act_probs, self.Q_var[obs,:])
         else:
             #act_probs = self.softmax(obs, Q = Q)
-            return np.dot(act_probs, Q[obs, :])
+            return np.dot(act_probs, Q)
 
     def calc_state_probs(self, obs):
         act_probs = self.softmax(obs)
@@ -87,6 +86,7 @@ class Trainer():
             self.nb_trials += 1
         self.total_reward = 0
         self.trajectory = []
+        self.action_history = []
 
     def calc_state_probs(self, obs):
         # return self.nb_visits/np.sum(self.nb_visits)
@@ -110,7 +110,7 @@ class Trainer():
             return p
         else:
             ref_probs = np.ones(self.agent.env.N_obs) * EPSILON / self.agent.env.N_obs
-            ref_probs[2] += (1 - EPSILON)
+            ref_probs[int(self.ref_prob)] += (1 - EPSILON)
             return ref_probs
 
         # state_probs = np.zeros(self.agent.env.N_obs)
@@ -129,7 +129,15 @@ class Trainer():
             return self.KL(past_obs, past_action, obs, done = done) - self.agent.KL[past_obs, past_action]
         else:
             return self.agent.GAMMA * self.agent.softmax_expectation(obs,
-                                                                     Q = self.agent.KL) - \
+                                                                     Q = self.agent.KL[obs,:]) - \
+                   self.agent.KL[past_obs, past_action]
+
+    def KL_err_time(self, past_obs, past_action, obs, current_time, done=False):
+        if done:
+            return self.KL(past_obs, past_action, obs, done=done) - self.agent.KL[past_obs, past_action]
+        else:
+            return self.agent.GAMMA * self.agent.softmax_expectation(current_time,
+                                                                     Q=self.agent.KL[obs, :]) - \
                    self.agent.KL[past_obs, past_action]
 
     def TD_err_ref(self, past_obs, past_action, obs, reward, done):
@@ -138,20 +146,23 @@ class Trainer():
         else:
             return reward + \
                    self.agent.GAMMA * self.agent.softmax_expectation(obs,
-                                                                     Q=self.agent.Q_ref) - \
+                                                                     Q=self.agent.Q_ref[obs,:]) - \
                    self.agent.Q_ref[past_obs, past_action]
 
     # For agent.Q_var update
     def KL_diff(self, past_obs, a, new_obs, done=False):
         return 0
 
+    def KL_diff_time(self, past_obs, past_time, a, new_obs, done=False):
+        return 0
+
     def TD_err_var(self, past_obs, past_action, obs, reward, done):
-        if self.agent.Q_ref[past_obs, past_action] == 0:
-            Q_ref = np.zeros((self.agent.env.N_obs, self.agent.env.N_act))
-            Q_var = 0
-        else:
-            Q_ref = self.agent.Q_ref
-            Q_var = self.agent.Q_var[past_obs, past_action]
+        # if False: #self.agent.Q_ref[past_obs, past_action] == 0:
+        #     Q_ref = np.zeros((self.agent.env.N_obs, self.agent.env.N_act))
+        #     Q_var = 0
+        # else:
+        Q_ref = self.agent.Q_ref[obs,:]
+        Q_var = self.agent.Q_var[past_obs, past_action]
         if done:
             return reward - self.agent.Q_var[past_obs, past_action] - self.KL_diff(past_obs, past_action, obs)
         else:
@@ -161,12 +172,34 @@ class Trainer():
                    Q_var - \
                    self.KL_diff(past_obs, past_action, obs, done = done)
 
+    def TD_err_var_time(self, past_obs, past_action, obs, past_time, current_time, reward, done):
+        # if False: #self.agent.Q_ref[past_obs, past_action] == 0:
+        #     Q_ref = np.zeros((self.agent.env.N_obs, self.agent.env.N_act))
+        #     Q_var = 0
+        # else:
+        if done:
+            return reward - self.agent.Q_var[past_time, past_action] - self.KL_diff_time(past_obs, past_time, past_action, obs)
+        else:
+            Q_ref = self.agent.Q_ref[current_time, :]
+            Q_var = self.agent.Q_var[past_time, past_action]
+            return reward + \
+                   self.agent.GAMMA * self.agent.softmax_expectation(current_time,
+                                                                     Q=Q_ref) - \
+                   Q_var - \
+                   self.KL_diff_time(past_obs, past_time, past_action, obs, done = done)
+
     def run_episode(self):
         self.agent.init_env()
         self.init_trial()
         self.trajectory.append(self.agent.env.get_observation())
         while True:
+            past_time = self.agent.env.get_time()
+            if self.agent.isTime:
+                mem_obs = self.agent.env.get_observation()
             past_obs, past_action, obs, reward, done = self.agent.step()
+            current_time = self.agent.env.get_time()
+            self.action_history.append(past_action)
+            self.trajectory.append(obs)
             self.nb_visits[obs] += 1
             self.obs_score *= 1 - self.OBS_LEAK
             self.obs_score[obs] += self.OBS_LEAK
@@ -178,27 +211,36 @@ class Trainer():
             if not self.agent.do_reward:
                 reward = 0
             self.total_reward += reward
-            self.agent.KL[past_obs, past_action] += self.agent.ALPHA * self.KL_err(past_obs, past_action, obs, done=done)
-            self.agent.Q_ref[past_obs, past_action] += self.agent.ALPHA * self.TD_err_ref(past_obs, past_action, obs, reward, done=done)
-            self.agent.Q_var[past_obs, past_action] += self.agent.ALPHA * self.TD_err_var(past_obs, past_action, obs, reward, done=done)
-            self.trajectory.append(obs)
-            V = np.zeros(self.agent.env.N_obs)
-
+            if self.agent.isTime:
+                past_obs = mem_obs
+                self.agent.KL[past_obs, past_action] += self.agent.ALPHA * self.KL_err_time(past_obs, past_action, obs,
+                                                                                       current_time, done=done)
+                self.agent.Q_ref[past_time, past_action] += self.agent.ALPHA * self.TD_err_ref(past_time, past_action, current_time, reward, done=done)
+                self.agent.Q_var[past_time, past_action] += self.agent.ALPHA * self.TD_err_var_time(past_obs, past_action, obs, past_time, current_time, reward, done=done)
+            else:
+                self.agent.KL[past_obs, past_action] += self.agent.ALPHA * self.KL_err(past_obs, past_action, obs,
+                                                                                       done=done)
+                self.agent.Q_ref[past_obs, past_action] += self.agent.ALPHA * self.TD_err_ref(past_obs, past_action,
+                                                                                              obs, reward, done=done)
+                self.agent.Q_var[past_obs, past_action] += self.agent.ALPHA * self.TD_err_var(past_obs, past_action,
+                                                                                              obs, reward, done=done)
             if done:
-                for s in range(self.agent.env.N_obs):
-                    V[s] = self.agent.softmax_expectation(s)
-                self.mem_V[self.nb_trials] = V
+                if not self.agent.isTime:
+                    V = np.zeros(self.agent.env.N_obs)
+                    for s in range(self.agent.env.N_obs):
+                        V[s] = self.agent.softmax_expectation(s)
+                    self.mem_V[self.nb_trials] = V
                 break
 
 class Q_learning_trainer(Trainer):
 
-    def __init__(self, agent):
-        super().__init__(agent)
+    def __init__(self, agent, EPSILON = 1e-3, ref_prob = 'unif'):
+        super().__init__(agent, EPSILON = EPSILON, ref_prob = ref_prob)
 
 class one_step_variational_trainer(Trainer):
 
-    def __init__(self, agent):
-        super().__init__(agent)
+    def __init__(self, agent, EPSILON = 1e-3, ref_prob = 'unif'):
+        super().__init__(agent, EPSILON = EPSILON, ref_prob = ref_prob)
 
     # agent.Q_var update
     def KL_diff(self, past_obs, a, new_obs, done = False):
@@ -209,8 +251,8 @@ class one_step_variational_trainer(Trainer):
 
 class final_variational_trainer(Trainer):
 
-    def __init__(self, agent):
-        super().__init__(agent)
+    def __init__(self, agent, EPSILON = 1e-3, ref_prob = 'unif'):
+        super().__init__(agent, EPSILON = EPSILON, ref_prob = ref_prob)
 
     def KL(self, past_obs, a, final_obs, done = False):
         if done:
@@ -228,4 +270,7 @@ class final_variational_trainer(Trainer):
         pi = self.agent.softmax(past_obs)[a]
         return (1-pi) * self.KL(past_obs, a, final_obs, done)
 
+    def KL_diff_time(self, past_obs, past_time, a, final_obs, done = False):
+        pi = self.agent.softmax(past_time)[a]
+        return (1-pi) * self.KL(past_obs, a, final_obs, done)
 
