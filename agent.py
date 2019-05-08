@@ -122,8 +122,7 @@ class Trainer():
         if done:
             return self.KL_diff(past_obs, past_action, obs, done = done) - self.agent.KL_diff[past_obs, past_action]
         else:
-            return self.KL_diff(past_obs, past_action, obs, done = done) +\
-                   self.agent.GAMMA * self.agent.softmax_expectation(obs,
+            return self.agent.GAMMA * self.agent.softmax_expectation(obs,
                                                                      Q = self.agent.KL_diff) - \
                    self.agent.KL_diff[past_obs, past_action]
 
@@ -205,16 +204,12 @@ class final_variational_trainer(Trainer):
         if done:
             state_probs = self.calc_final_state_probs(final_obs)
             ref_probs = self.calc_ref_probs(final_obs, EPSILON=1e-10)
-            #print('KL loss diff :', pi * (1 - pi) * (np.log(state_probs[new_obs]) + 1 ))
-            #return np.log(state_probs[final_obs]) + 1 - np.log(ref_probs[final_obs])
             return np.log(state_probs[final_obs]) - np.log(ref_probs[final_obs])  #+1
         else:
-            state_probs = self.calc_state_probs(final_obs)
-            ref_probs = self.calc_ref_probs(final_obs, EPSILON=1e-10)
-            # print('KL loss diff :', pi * (1 - pi) * (np.log(state_probs[new_obs]) + 1 ))
-            # return np.log(state_probs[final_obs]) + 1 - np.log(ref_probs[final_obs])
-            return np.log(state_probs[final_obs]) - np.log(ref_probs[final_obs])
-            #return self.agent.KL_diff[past_obs, a]
+            #state_probs = self.calc_state_probs(final_obs)
+            #ref_probs = self.calc_ref_probs(final_obs, EPSILON=1e-10)
+            #return np.log(state_probs[final_obs]) - np.log(ref_probs[final_obs])
+            return self.agent.KL_diff[past_obs, a]
 
     # agent.Q_var update
     def KL_diff_loss(self, past_obs, a, final_obs, done = False):
