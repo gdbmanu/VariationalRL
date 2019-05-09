@@ -151,7 +151,7 @@ class Trainer():
                 self.agent.Q_var[past_obs, past_action] += self.agent.ALPHA * self.TD_err_var(past_obs, past_action,
                                                                                               obs, reward, done=done)
             if done:
-                if not self.agent.isTime:
+                if self.nb_trials % 100 == 0 and not self.agent.isTime:
                     V = np.zeros(self.agent.env.N_obs)
                     for s in range(self.agent.env.N_obs):
                         V[s] = self.agent.softmax_expectation(s)
