@@ -108,7 +108,7 @@ class Environment:
         print(next)
         print(reward)
 
-        return cls(direction, next, reward, initial_state_range=initial_state_range, total_steps=2*side-1)
+        return cls(direction, next, reward, initial_state_range=initial_state_range, total_steps=2*(side-1))
 
 
     def get_observation(self):
