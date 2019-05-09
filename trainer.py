@@ -58,23 +58,21 @@ class Trainer():
     def KL(self, past_obs, a, new_obs, done=False):
         return 0
 
-    def KL_err(self, past_obs, past_action, obs, done = False):
+    def KL_err(self, past_obs, past_action, obs, done = False, current_time = None):
         if done:
             return self.KL(past_obs, past_action, obs, done = done) - self.agent.KL[past_obs, past_action]
         else:
-            return self.agent.GAMMA * self.agent.softmax_expectation(obs,
-                                                                     Q = self.agent.KL[obs,:]) - \
-                   self.agent.KL[past_obs, past_action]
+            if current_time is None:
+                return self.agent.GAMMA * self.agent.softmax_expectation(obs,
+                                                                         Q = self.agent.KL[obs,:]) - \
+                       self.agent.KL[past_obs, past_action]
+            else:
+                return self.agent.GAMMA * self.agent.softmax_expectation(current_time,
+                                                                         Q=self.agent.KL[obs, :]) - \
+                       self.agent.KL[past_obs, past_action]
 
-    def KL_err_time(self, past_obs, past_action, obs, current_time, done=False):
-        if done:
-            return self.KL(past_obs, past_action, obs, done=done) - self.agent.KL[past_obs, past_action]
-        else:
-            return self.agent.GAMMA * self.agent.softmax_expectation(current_time,
-                                                                     Q=self.agent.KL[obs, :]) - \
-                   self.agent.KL[past_obs, past_action]
 
-    def TD_err_ref(self, past_obs, past_action, obs, reward, done):
+    def TD_err_ref(self, past_obs, past_action, obs, reward, done=False):
         if done:
             return reward - self.agent.Q_ref[past_obs, past_action]
         else:
@@ -84,43 +82,35 @@ class Trainer():
                    self.agent.Q_ref[past_obs, past_action]
 
     # For agent.Q_var update
-    def KL_diff(self, past_obs, a, new_obs, done=False):
+    def KL_diff(self, past_obs, a, new_obs, done=False, past_time = None):
         return 0
 
-    def KL_diff_time(self, past_obs, past_time, a, new_obs, done=False):
-        return 0
-
-    def TD_err_var(self, past_obs, past_action, obs, reward, done):
-        # if False: #self.agent.Q_ref[past_obs, past_action] == 0:
-        #     Q_ref = np.zeros((self.agent.env.N_obs, self.agent.env.N_act))
-        #     Q_var = 0
-        # else:
-        Q_ref = self.agent.Q_ref[obs,:]
-        Q_var = self.agent.Q_var[past_obs, past_action]
-        if done:
-            return reward - self.agent.Q_var[past_obs, past_action] - self.KL_diff(past_obs, past_action, obs)
-        else:
-            return reward + \
-                   self.agent.GAMMA * self.agent.softmax_expectation(obs,
-                                                                     Q=Q_ref) - \
-                   Q_var - \
-                   self.KL_diff(past_obs, past_action, obs, done = done)
-
-    def TD_err_var_time(self, past_obs, past_action, obs, past_time, current_time, reward, done):
+    def TD_err_var(self, past_obs, past_action, obs, reward, done=False, past_time=None, current_time=None):
         # if False: #self.agent.Q_ref[past_obs, past_action] == 0:
         #     Q_ref = np.zeros((self.agent.env.N_obs, self.agent.env.N_act))
         #     Q_var = 0
         # else:
         if done:
-            return reward - self.agent.Q_var[past_time, past_action] - self.KL_diff_time(past_obs, past_time, past_action, obs)
+            if past_time is None:
+                return reward - self.agent.Q_var[past_obs, past_action] - self.KL_diff(past_obs, past_action, obs,
+                                                                                       past_time = past_time)
+            else:
+                return reward - self.agent.Q_var[past_time, past_action] - self.KL_diff(past_obs, past_action, obs,
+                                                                        past_time=past_time)
         else:
-            Q_ref = self.agent.Q_ref[current_time, :]
-            Q_var = self.agent.Q_var[past_time, past_action]
+            if past_time is None:
+                Q_ref = self.agent.Q_ref[obs, :]
+                Q_var = self.agent.Q_var[past_obs, past_action]
+                obs_or_time = obs
+            else:
+                Q_ref = self.agent.Q_ref[current_time, :]
+                Q_var = self.agent.Q_var[past_time, past_action]
+                obs_or_time = current_time
             return reward + \
-                   self.agent.GAMMA * self.agent.softmax_expectation(current_time,
+                   self.agent.GAMMA * self.agent.softmax_expectation(obs_or_time,
                                                                      Q=Q_ref) - \
                    Q_var - \
-                   self.KL_diff_time(past_obs, past_time, past_action, obs, done = done)
+                   self.KL_diff(past_obs, past_action, obs, done = done, past_time = past_time)
 
     def run_episode(self):
         self.agent.init_env()
@@ -147,10 +137,12 @@ class Trainer():
             self.total_reward += reward
             if self.agent.isTime:
                 past_obs = mem_obs
-                self.agent.KL[past_obs, past_action] += self.agent.ALPHA * self.KL_err_time(past_obs, past_action, obs,
-                                                                                       current_time, done=done)
+                self.agent.KL[past_obs, past_action] += self.agent.ALPHA * self.KL_err(past_obs, past_action, obs,
+                                                                                       done=done, current_time=current_time)
                 self.agent.Q_ref[past_time, past_action] += self.agent.ALPHA * self.TD_err_ref(past_time, past_action, current_time, reward, done=done)
-                self.agent.Q_var[past_time, past_action] += self.agent.ALPHA * self.TD_err_var_time(past_obs, past_action, obs, past_time, current_time, reward, done=done)
+                self.agent.Q_var[past_time, past_action] += self.agent.ALPHA * self.TD_err_var(past_obs, past_action, obs,
+                                                                                               reward, done=done,
+                                                                                               past_time=past_time, current_time=current_time)
             else:
                 self.agent.KL[past_obs, past_action] += self.agent.ALPHA * self.KL_err(past_obs, past_action, obs,
                                                                                        done=done)
@@ -177,7 +169,7 @@ class One_step_variational_trainer(Trainer):
         super().__init__(agent, EPSILON = EPSILON, ref_prob = ref_prob)
 
     # agent.Q_var update
-    def KL_diff(self, past_obs, a, new_obs, done = False):
+    def KL_diff(self, past_obs, a, new_obs, done = False, past_time = None):
         pi = self.agent.softmax(past_obs)[a]
         state_probs = self.agent.calc_state_probs(past_obs)
         ref_probs = self.calc_ref_probs(past_obs, EPSILON=self.EPSILON)
@@ -200,11 +192,9 @@ class Final_variational_trainer(Trainer):
             return self.agent.KL[past_obs, a]
 
     # agent.Q_var update
-    def KL_diff(self, past_obs, a, final_obs, done = False):
-        pi = self.agent.softmax(past_obs)[a]
+    def KL_diff(self, past_obs, a, final_obs, done = False, past_time = None):
+        if past_time is None:
+            pi = self.agent.softmax(past_obs)[a]
+        else:
+            pi = self.agent.softmax(past_time)[a]
         return (1-pi) * self.KL(past_obs, a, final_obs, done)
-
-    def KL_diff_time(self, past_obs, past_time, a, final_obs, done = False):
-        pi = self.agent.softmax(past_time)[a]
-        return (1-pi) * self.KL(past_obs, a, final_obs, done)
-
