@@ -126,12 +126,12 @@ class Trainer():
             self.trajectory.append(obs)
             self.nb_visits[obs] += 1
             self.obs_score *= 1 - self.OBS_LEAK
-            self.obs_score[obs] += self.OBS_LEAK
+            self.obs_score[obs] += 1
             self.agent.num_episode += 1
             if done:
                 self.nb_visits_final[obs] += 1
                 self.obs_score_final *= 1 - self.OBS_LEAK
-                self.obs_score_final[obs] += self.OBS_LEAK
+                self.obs_score_final[obs] += 1
             if not self.agent.do_reward:
                 reward = 0
             self.total_reward += reward
