@@ -160,13 +160,13 @@ class Trainer():
 
 class Q_learning_trainer(Trainer):
 
-    def __init__(self, agent, EPSILON = 1e-3, ref_prob = 'unif'):
-        super().__init__(agent, EPSILON = EPSILON, ref_prob = ref_prob)
+    def __init__(self, agent, EPSILON = 1e-3, OBS_LEAK = 1e-3, ref_prob = 'unif'):
+        super().__init__(agent, EPSILON = EPSILON, OBS_LEAK = OBS_LEAK, ref_prob = ref_prob)
 
 class One_step_variational_trainer(Trainer):
 
-    def __init__(self, agent, EPSILON = 1e-3, ref_prob = 'unif'):
-        super().__init__(agent, EPSILON = EPSILON, ref_prob = ref_prob)
+    def __init__(self, agent, EPSILON = 1e-3, OBS_LEAK = 1e-3, ref_prob = 'unif'):
+        super().__init__(agent, EPSILON = EPSILON, OBS_LEAK = OBS_LEAK, ref_prob = ref_prob)
 
     # agent.Q_var update
     def KL_diff(self, past_obs, a, new_obs, done = False, past_time = None):
@@ -177,8 +177,8 @@ class One_step_variational_trainer(Trainer):
 
 class Final_variational_trainer(Trainer):
 
-    def __init__(self, agent, EPSILON = 1e-3, ref_prob = 'unif'):
-        super().__init__(agent, EPSILON = EPSILON, ref_prob = ref_prob)
+    def __init__(self, agent, EPSILON = 1e-3, OBS_LEAK = 1e-3, ref_prob = 'unif'):
+        super().__init__(agent, EPSILON = EPSILON, OBS_LEAK = OBS_LEAK, ref_prob = ref_prob)
 
     def KL(self, past_obs, a, final_obs, done = False):
         if done:
