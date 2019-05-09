@@ -1,5 +1,6 @@
 from environment import Environment
-from agent import Agent, Q_learning_trainer, one_step_variational_trainer, final_variational_trainer
+from agent import Agent
+from trainer import Q_learning_trainer, One_step_variational_trainer, Final_variational_trainer
 
 # Hyperparameters
 
@@ -9,11 +10,11 @@ N = 10000 # Number of episodes
 
 #env = Environment.tp1(initial_state_range=4)
 env = Environment.bottleneck(initial_state_range=0)
-agent = Agent.timeAgent(env, GAMMA=1, BETA=10, do_reward = True)
+agent = Agent.timeAgent(env, GAMMA=1, ALPHA= 3e-2, BETA=8, do_reward = True)
 
 #trainer = Q_learning_trainer(agent)
-#trainer = one_step_variational_trainer(agent)
-trainer = final_variational_trainer(agent, EPSILON = 1e-3, ref_prob = 'unif')
+#trainer = One_step_variational_trainer(agent)
+trainer = Final_variational_trainer(agent, EPSILON = 1e-3, ref_prob = 'unif')
 #
 for i in range(N):
     print(i)
