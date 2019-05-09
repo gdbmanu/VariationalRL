@@ -2,7 +2,7 @@ import numpy as np
 
 class Trainer():
 
-    def __init__(self, agent, OBS_LEAK = 1e-3, EPSILON = 1e-3, ref_prob = 'unif'):
+    def __init__(self, agent, OBS_LEAK = 1e-3, EPSILON = 1e-3, ref_prob = 'unif', final = False):
         self.agent = agent
         self.nb_trials = 0
         self.init_trial(update = False)
@@ -14,6 +14,7 @@ class Trainer():
         self.EPSILON = EPSILON
         self.mem_V = {}
         self.ref_prob = ref_prob
+        self.final = final
 
     def init_trial(self, update = True):
         if update:
@@ -161,12 +162,12 @@ class Trainer():
 
 class Q_learning_trainer(Trainer):
 
-    def __init__(self, agent, EPSILON = 1e-3, OBS_LEAK = 1e-3, ref_prob = 'unif'):
+    def __init__(self, agent, EPSILON = 1e-3, OBS_LEAK = 1e-3, ref_prob = 'unif', final = False):
         super().__init__(agent, EPSILON = EPSILON, OBS_LEAK = OBS_LEAK, ref_prob = ref_prob)
 
 class One_step_variational_trainer(Trainer):
 
-    def __init__(self, agent, EPSILON = 1e-3, OBS_LEAK = 1e-3, ref_prob = 'unif'):
+    def __init__(self, agent, EPSILON = 1e-3, OBS_LEAK = 1e-3, ref_prob = 'unif', final = False):
         super().__init__(agent, EPSILON = EPSILON, OBS_LEAK = OBS_LEAK, ref_prob = ref_prob)
 
     # agent.Q_var update
@@ -178,19 +179,22 @@ class One_step_variational_trainer(Trainer):
 
 class Final_variational_trainer(Trainer):
 
-    def __init__(self, agent, EPSILON = 1e-3, OBS_LEAK = 1e-3, ref_prob = 'unif'):
+    def __init__(self, agent, EPSILON = 1e-3, OBS_LEAK = 1e-3, ref_prob = 'unif', final = False):
         super().__init__(agent, EPSILON = EPSILON, OBS_LEAK = OBS_LEAK, ref_prob = ref_prob)
 
     def KL(self, past_obs, a, final_obs, done = False):
-        if done:
-            state_probs = self.calc_final_state_probs(final_obs)
-            ref_probs = self.calc_ref_probs(final_obs, EPSILON=self.EPSILON)
-            return np.log(state_probs[final_obs]) - np.log(ref_probs[final_obs])  #+1
+        if self.final:
+            if done:
+                state_probs = self.calc_final_state_probs(final_obs)
+                ref_probs = self.calc_ref_probs(final_obs, EPSILON=self.EPSILON)
+                return np.log(state_probs[final_obs]) - np.log(ref_probs[final_obs])  #+1
+            else:
+                return self.agent.KL[past_obs, a]
         else:
             state_probs = self.calc_state_probs(final_obs)
             ref_probs = self.calc_ref_probs(final_obs, EPSILON=self.EPSILON)
             return np.log(state_probs[final_obs]) - np.log(ref_probs[final_obs])
-            #return self.agent.KL[past_obs, a]
+
 
     # agent.Q_var update
     def KL_diff(self, past_obs, a, final_obs, done = False, past_time = None):
