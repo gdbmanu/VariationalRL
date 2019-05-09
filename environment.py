@@ -78,6 +78,39 @@ class Environment:
 
         return cls(direction, next, reward, initial_state_range=initial_state_range, total_steps=7)
 
+    @classmethod
+    def square(cls, initial_state_range=0, side = 10):
+        direction = {
+            0: "E",
+            1: "S",
+            2: "W",
+            3: "N"
+        }
+
+        next = {}
+        reward = {}
+        for i in range(side):
+            for j in range(side):
+                state = i * side + j
+                reward[state] = 0
+                next[state] = {}
+                if j < side - 1:
+                    next[state]["E"] = state + 1
+                if j > 0:
+                    next[state]["W"] = state - 1
+                if i < side - 1:
+                    next[state]["S"] = state + side
+                if i > 0:
+                    next[state]["N"] = state - side
+
+        reward[side*side-1] = 1
+
+        print(next)
+        print(reward)
+
+        return cls(direction, next, reward, initial_state_range=initial_state_range, total_steps=2*side)
+
+
     def get_observation(self):
         return self.state
 
