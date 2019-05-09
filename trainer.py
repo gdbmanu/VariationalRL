@@ -63,7 +63,8 @@ class Trainer():
             return self.KL(past_obs, past_action, obs, done = done) - self.agent.KL[past_obs, past_action]
         else:
             if current_time is None:
-                return self.agent.GAMMA * self.agent.softmax_expectation(obs,
+                return self.KL(past_obs, past_action, obs, done = done) + \
+                       self.agent.GAMMA * self.agent.softmax_expectation(obs,
                                                                          Q = self.agent.KL[obs,:]) - \
                        self.agent.KL[past_obs, past_action]
             else:
@@ -186,10 +187,10 @@ class Final_variational_trainer(Trainer):
             ref_probs = self.calc_ref_probs(final_obs, EPSILON=self.EPSILON)
             return np.log(state_probs[final_obs]) - np.log(ref_probs[final_obs])  #+1
         else:
-            #state_probs = self.calc_state_probs(final_obs)
-            #ref_probs = self.calc_ref_probs(final_obs, EPSILON=1e-10)
-            #return np.log(state_probs[final_obs]) - np.log(ref_probs[final_obs])
-            return self.agent.KL[past_obs, a]
+            state_probs = self.calc_state_probs(final_obs)
+            ref_probs = self.calc_ref_probs(final_obs, EPSILON=self.EPSILON)
+            return np.log(state_probs[final_obs]) - np.log(ref_probs[final_obs])
+            #return self.agent.KL[past_obs, a]
 
     # agent.Q_var update
     def KL_diff(self, past_obs, a, final_obs, done = False, past_time = None):
