@@ -142,6 +142,19 @@ class Trainer():
                    Q_var - \
                    Q_mult * self.KL_diff(past_obs, past_action, obs, done=done, past_time=past_time)
 
+    def BETA_err(self, past_obs, past_action, obs, past_time=None):
+        if self.Q_learning:
+            Q_mult = 0
+        else:
+            Q_mult = 1
+        if past_time is None:
+            obs_or_time = past_obs
+        else:
+            obs_or_time = past_time
+        return - Q_mult * (self.agent.Q_var[obs_or_time, past_action]
+                           - self.agent.softmax_expectation(obs_or_time)) \
+               * self.agent.KL[past_obs, past_action]
+
     def online_update(self, past_obs, past_action, obs, reward, done):
         self.agent.KL[past_obs, past_action] += self.agent.ALPHA * 0.3 * self.KL_err(past_obs,
                                                                                      past_action,
@@ -157,6 +170,9 @@ class Trainer():
                                                                                       obs,
                                                                                       reward,
                                                                                       done=done)
+        # self.agent.BETA += self.agent.ALPHA * 0.1 * self.BETA_err(past_obs,
+        #                                                            past_action,
+        #                                                            obs)
 
     def monte_carlo_update(self, past_obs, past_action, obs, reward, done):
         pass
@@ -176,6 +192,10 @@ class Trainer():
                                                                                        reward, done=done,
                                                                                        past_time=past_time,
                                                                                        current_time=current_time)
+        # self.agent.BETA += self.agent.ALPHA * 0.3 * self.BETA_err(past_obs,
+        #                                                            past_action,
+        #                                                            obs,
+        #                                                            past_time=past_time)
 
     def monte_carlo_time_update(self, past_obs, past_action, obs, reward, done, past_time, current_time):
         if self.Q_learning:
@@ -202,8 +222,12 @@ class Trainer():
                 self.agent.Q_ref[time, past_action] += self.agent.ALPHA * TD_err_ref
                 TD_err_var = np.sum(liste_reward[time:]) \
                              - self.agent.Q_var[time, past_action] \
-                             - Q_mult * (1 - pi) * np.sum(liste_KL[time:])
+                             - Q_mult * self.agent.BETA * (1 - pi) * np.sum(liste_KL[time:])
                 self.agent.Q_var[time, past_action] += self.agent.ALPHA * TD_err_var
+                # BETA_err = - Q_mult * (self.agent.Q_var[time, past_action]
+                #            - self.agent.softmax_expectation(time)) \
+                #            * np.sum(liste_KL[time:])
+                # self.agent.BETA += self.agent.ALPHA * 0.3 * BETA_err
 
     def run_episode(self):
         self.agent.init_env()
@@ -323,7 +347,7 @@ class One_step_variational_trainer(Trainer):
         pi = self.agent.softmax(past_obs)[a]
         state_probs = self.agent.calc_state_probs(past_obs)
         ref_probs = self.calc_ref_probs(past_obs, EPSILON=self.EPSILON)
-        return (1 - pi) * (np.log(state_probs[new_obs]) + pi / state_probs[new_obs] * 1 - np.log(ref_probs[new_obs]))
+        return (1 - pi) * self.agent.BETA * (np.log(state_probs[new_obs]) + pi / state_probs[new_obs] * 1 - np.log(ref_probs[new_obs]))
 
 
 class Final_variational_trainer(Trainer):
@@ -351,4 +375,4 @@ class Final_variational_trainer(Trainer):
             pi = self.agent.softmax(past_obs)[a]
         else:
             pi = self.agent.softmax(past_time)[a]
-        return (1 - pi) * self.agent.KL[past_obs, a]  # self.KL(past_obs, a, final_obs, done)
+        return (1 - pi) * self.agent.BETA * self.agent.KL[past_obs, a]  # self.KL(past_obs, a, final_obs, done)

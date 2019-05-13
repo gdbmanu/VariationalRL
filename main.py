@@ -12,18 +12,19 @@ N = 10000 # Number of episodes
 #env = Environment.bottleneck(initial_state_range=0)
 env = Environment.square(initial_state_range=0)
 
-agent = Agent(env, GAMMA=1, ALPHA= 3e-2, BETA=8, do_reward = False)
+agent = Agent(env, GAMMA=1, ALPHA= 1e-1, BETA = 8, do_reward = False)
 #agent = Agent.timeAgent(env, GAMMA=1, ALPHA= 3e-2, BETA=8, do_reward = True)
 
-trainer = Q_learning_trainer(agent)
+#trainer = Q_learning_trainer(agent)
 #trainer = One_step_variational_trainer(agent)
-#trainer = Final_variational_trainer(agent, EPSILON = 1e-3, ref_prob = 'unif')
+trainer = Final_variational_trainer(agent, EPSILON = 1e-3, ref_prob = 'unif')
 #
 for i in range(N):
     print(i)
     trainer.run_episode()
     print("Trajectory: ", trainer.trajectory)
     print("Total reward got: %.4f" % trainer.total_reward)
+    print("BETA :", agent.BETA)
 #
 print('Q_ref', agent.Q_ref)
 print('KL', agent.KL)

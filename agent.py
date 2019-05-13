@@ -2,7 +2,7 @@ import numpy as np
 
 class Agent:
 
-    def __init__(self, env, ALPHA=0.1, GAMMA=0.9, BETA=0.5, isTime=False, do_reward = True):
+    def __init__(self, env, ALPHA=0.1, GAMMA=0.9, BETA = 1, isTime=False, do_reward = True):
         #self.total_reward = 0.0
         self.env = env
         self.ALPHA = ALPHA
@@ -21,7 +21,7 @@ class Agent:
 
 
     @classmethod
-    def timeAgent(cls, env, ALPHA=0.1, GAMMA=0.9, BETA=0.5, do_reward=False):
+    def timeAgent(cls, env, ALPHA=0.1, GAMMA=0.9, BETA = 1, do_reward=False):
         return cls(env, ALPHA=ALPHA, GAMMA=GAMMA, BETA=BETA, isTime=True, do_reward=do_reward)
 
     def init_env(self, total_steps=10):
