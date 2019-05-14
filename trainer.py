@@ -188,8 +188,8 @@ class Trainer():
                 past_action = self.action_history[time]
                 new_obs = self.trajectory[time + 1]
                 test_done = current_time == time + 1
-                liste_KL[time] = self.KL(past_obs, past_action, new_obs, done=test_done)
-                liste_reward[time] = self.reward_history[time]
+                liste_KL[time] = self.KL(past_obs, past_action, new_obs, done=test_done) * self.agent.GAMMA ** (current_time - time + 1)
+                liste_reward[time] = self.reward_history[time] * self.agent.GAMMA ** (current_time - time + 1)
             for time in range(current_time):
                 past_obs = self.trajectory[time]
                 past_action = self.action_history[time]
@@ -240,8 +240,8 @@ class Trainer():
                 past_action = self.action_history[time]
                 new_obs = self.trajectory[time + 1]
                 test_done = current_time == time + 1
-                liste_KL[time] = self.KL(past_obs, past_action, new_obs, done=test_done)
-                liste_reward[time] = self.reward_history[time]
+                liste_KL[time] = self.KL(past_obs, past_action, new_obs, done=test_done) * self.agent.GAMMA ** (current_time - time + 1)
+                liste_reward[time] = self.reward_history[time] * self.agent.GAMMA ** (current_time - time + 1)
             for time in range(current_time):
                 past_obs = self.trajectory[time]
                 past_action = self.action_history[time]
