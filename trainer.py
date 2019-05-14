@@ -156,11 +156,11 @@ class Trainer():
                * self.agent.KL[past_obs, past_action]
 
     def online_update(self, past_obs, past_action, obs, reward, done):
-        self.agent.KL[past_obs, past_action] += self.agent.ALPHA * 0.3 * self.KL_err(past_obs,
+        self.agent.KL[past_obs, past_action] += self.agent.ALPHA * 1 * self.KL_err(past_obs,
                                                                                      past_action,
                                                                                      obs,
                                                                                      done=done)
-        self.agent.Q_ref[past_obs, past_action] += self.agent.ALPHA * 0.3 * self.TD_err_ref(past_obs,
+        self.agent.Q_ref[past_obs, past_action] += self.agent.ALPHA * 1 * self.TD_err_ref(past_obs,
                                                                                             past_action,
                                                                                             obs,
                                                                                             reward,
@@ -175,15 +175,45 @@ class Trainer():
         #                                                            obs)
 
     def monte_carlo_update(self, past_obs, past_action, obs, reward, done):
-        pass
+        if self.Q_learning:
+            Q_mult = 0
+        else:
+            Q_mult = 1
+        if done:
+            current_time = self.agent.env.get_time()
+            liste_KL = np.zeros(current_time)
+            liste_reward = np.zeros(current_time)
+            for time in range(current_time):
+                past_obs = self.trajectory[time]
+                past_action = self.action_history[time]
+                new_obs = self.trajectory[time + 1]
+                test_done = current_time == time + 1
+                liste_KL[time] = self.KL(past_obs, past_action, new_obs, done=test_done)
+                liste_reward[time] = self.reward_history[time]
+            for time in range(current_time):
+                past_obs = self.trajectory[time]
+                past_action = self.action_history[time]
+                new_obs = self.trajectory[time + 1]
+                pi = self.agent.softmax(past_obs)[past_action]
+                TD_err_ref = np.sum(liste_reward[time:]) \
+                             - self.agent.Q_ref[past_obs, past_action]
+                self.agent.Q_ref[past_obs, past_action] += self.agent.ALPHA * TD_err_ref
+                TD_err_var = np.sum(liste_reward[time:]) \
+                             - self.agent.Q_var[past_obs, past_action] \
+                             - Q_mult * self.agent.BETA * (1 - pi) * np.sum(liste_KL[time:])
+                self.agent.Q_var[past_obs, past_action] += self.agent.ALPHA * TD_err_var
+                # BETA_err = - Q_mult * (self.agent.Q_var[time, past_action]
+                #            - self.agent.softmax_expectation(time)) \
+                #            * np.sum(liste_KL[time:])
+                # self.agent.BETA += self.agent.ALPHA * 0.3 * BETA_err
 
     def online_time_update(self, past_obs, past_action, obs, reward, done, past_time, current_time):
-        self.agent.KL[past_obs, past_action] += self.agent.ALPHA * 0.3 * self.KL_err(past_obs,
+        self.agent.KL[past_obs, past_action] += self.agent.ALPHA * 1 * self.KL_err(past_obs,
                                                                                      past_action,
                                                                                      obs,
                                                                                      done=done,
                                                                                      current_time=current_time)
-        self.agent.Q_ref[past_time, past_action] += self.agent.ALPHA * 0.3 * self.TD_err_ref(past_time,
+        self.agent.Q_ref[past_time, past_action] += self.agent.ALPHA * 1 * self.TD_err_ref(past_time,
                                                                                              past_action,
                                                                                              current_time,
                                                                                              reward,
@@ -254,7 +284,7 @@ class Trainer():
                 self.obs_score_final *= 1 - self.OBS_LEAK
                 self.obs_score_final[obs] += 1
 
-            mem_reward = 0
+            mem_reward = reward
             if not self.agent.do_reward:
                 reward = 0
             if self.KL_reward:
