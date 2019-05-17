@@ -334,7 +334,6 @@ class Q_learning_trainer(Trainer):
                  ref_prob='unif',
                  final=False,
                  monte_carlo=False,
-                 Q_learning=True,
                  KL_reward=False):
         super().__init__(agent,
                          EPSILON=EPSILON,
@@ -354,7 +353,6 @@ class KL_Q_learning_trainer(Trainer):
                  ref_prob='unif',
                  final=False,
                  monte_carlo=False,
-                 Q_learning=True,
                  KL_reward=True):
         super().__init__(agent,
                          EPSILON=EPSILON,
@@ -375,7 +373,8 @@ class One_step_variational_trainer(Trainer):
                  final=False,
                  monte_carlo=False,
                  Q_learning=False,
-                 KL_reward=False):
+                 KL_reward=False,
+                 ignore_pi = False):
         super().__init__(agent,
                          EPSILON=EPSILON,
                          OBS_LEAK=OBS_LEAK,
@@ -383,7 +382,8 @@ class One_step_variational_trainer(Trainer):
                          final=final,
                          monte_carlo=monte_carlo,
                          Q_learning=False,
-                         KL_reward=KL_reward)
+                         KL_reward=KL_reward,
+                         ignore_pi=ignore_pi)
 
     # agent.Q_var update
     def KL_diff(self, past_obs, a, new_obs, done=False, past_time=None):
@@ -402,7 +402,8 @@ class Final_variational_trainer(Trainer):
                  final=False,
                  monte_carlo=False,
                  Q_learning=False,
-                 KL_reward=False):
+                 KL_reward=False,
+                 ignore_pi = False):
         super().__init__(agent,
                          EPSILON=EPSILON,
                          OBS_LEAK=OBS_LEAK,
@@ -410,7 +411,8 @@ class Final_variational_trainer(Trainer):
                          final=final,
                          monte_carlo=monte_carlo,
                          Q_learning=False,
-                         KL_reward=KL_reward)
+                         KL_reward=KL_reward,
+                         ignore_pi=ignore_pi)
 
     # agent.Q_var update
     def KL_diff(self, past_obs, a, final_obs, done=False, past_time=None):
