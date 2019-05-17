@@ -10,7 +10,8 @@ class Trainer():
                  final=False,
                  monte_carlo=False,
                  Q_learning=False,
-                 KL_reward=False):
+                 KL_reward=False,
+                 ignore_pi = False):
         self.agent = agent
         self.nb_trials = 0
         self.init_trial(update=False)
@@ -26,6 +27,7 @@ class Trainer():
         self.monte_carlo = monte_carlo
         self.Q_learning = Q_learning
         self.KL_reward = KL_reward
+        self.ignore_pi = ignore_pi
 
     def init_trial(self, update=True):
         if update:
@@ -198,9 +200,14 @@ class Trainer():
                 TD_err_ref = np.sum(liste_reward[time:]) \
                              - self.agent.Q_ref[past_obs, past_action]
                 self.agent.Q_ref[past_obs, past_action] += self.agent.ALPHA * TD_err_ref
-                TD_err_var = np.sum(liste_reward[time:]) \
-                             - self.agent.Q_var[past_obs, past_action] \
-                             - Q_mult * self.agent.BETA * (1 - pi) * np.sum(liste_KL[time:])
+                if self.ignore_pi:
+                    TD_err_var = np.sum(liste_reward[time:]) \
+                                 - self.agent.Q_var[past_obs, past_action] \
+                                 - Q_mult * self.agent.BETA * np.sum(liste_KL[time:])
+                else:
+                    TD_err_var = np.sum(liste_reward[time:]) \
+                                - self.agent.Q_var[past_obs, past_action] \
+                                - Q_mult * self.agent.BETA * (1 - pi) * np.sum(liste_KL[time:])
                 self.agent.Q_var[past_obs, past_action] += self.agent.ALPHA * TD_err_var
                 # BETA_err = - Q_mult * (self.agent.Q_var[time, past_action]
                 #            - self.agent.softmax_expectation(time)) \
@@ -239,6 +246,7 @@ class Trainer():
                 past_obs = self.trajectory[time]
                 past_action = self.action_history[time]
                 new_obs = self.trajectory[time + 1]
+
                 test_done = current_time == time + 1
                 liste_KL[time] = self.KL(past_obs, past_action, new_obs, done=test_done) * self.agent.GAMMA ** (current_time - time + 1)
                 liste_reward[time] = self.reward_history[time] * self.agent.GAMMA ** (current_time - time + 1)
@@ -250,9 +258,14 @@ class Trainer():
                 TD_err_ref = np.sum(liste_reward[time:]) \
                              - self.agent.Q_ref[time, past_action]
                 self.agent.Q_ref[time, past_action] += self.agent.ALPHA * TD_err_ref
-                TD_err_var = np.sum(liste_reward[time:]) \
-                             - self.agent.Q_var[time, past_action] \
-                             - Q_mult * self.agent.BETA * (1 - pi) * np.sum(liste_KL[time:])
+                if self.ignore_pi:
+                    TD_err_var = np.sum(liste_reward[time:]) \
+                                 - self.agent.Q_var[time, past_action] \
+                                 - Q_mult * self.agent.BETA *  np.sum(liste_KL[time:])
+                else:
+                    TD_err_var = np.sum(liste_reward[time:]) \
+                                - self.agent.Q_var[time, past_action] \
+                                - Q_mult * self.agent.BETA * (1 - pi) * np.sum(liste_KL[time:])
                 self.agent.Q_var[time, past_action] += self.agent.ALPHA * TD_err_var
                 # BETA_err = - Q_mult * (self.agent.Q_var[time, past_action]
                 #            - self.agent.softmax_expectation(time)) \
@@ -405,4 +418,7 @@ class Final_variational_trainer(Trainer):
             pi = self.agent.softmax(past_obs)[a]
         else:
             pi = self.agent.softmax(past_time)[a]
-        return (1 - pi) * self.agent.BETA * self.agent.KL[past_obs, a]  # self.KL(past_obs, a, final_obs, done)
+        if self.ignore_pi:
+            return self.agent.BETA * self.agent.KL[past_obs, a]
+        else:
+            return (1 - pi) * self.agent.BETA * self.agent.KL[past_obs, a]  # self.KL(past_obs, a, final_obs, done)
