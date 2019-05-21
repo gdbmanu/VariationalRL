@@ -100,12 +100,12 @@ class Trainer():
 
     def TD_err_ref(self, past_obs, past_action, obs, reward, done=False):
         if done:
-            return reward - self.agent.Q_ref[past_obs, past_action]
+            return self.agent.BETA * (reward - self.agent.Q_ref[past_obs, past_action])
         else:
-            return reward + \
+            return self.agent.BETA * (reward + \
                    self.agent.GAMMA * self.agent.softmax_expectation(obs,
                                                                      Q=self.agent.Q_ref[obs, :]) - \
-                   self.agent.Q_ref[past_obs, past_action]
+                   self.agent.Q_ref[past_obs, past_action])
 
     # For agent.Q_var update
     def KL_diff(self, past_obs, a, new_obs, done=False, past_time=None):
@@ -221,8 +221,10 @@ class Trainer():
                     obs_or_time = self.trajectory[time]
                 past_action = self.action_history[time]
                 pi = self.agent.softmax(obs_or_time)[past_action]
-                TD_err_ref = np.sum(liste_reward[time:]) \
-                             - self.agent.Q_ref[obs_or_time, past_action]
+                TD_err_ref = self.agent.BETA * (
+                                np.sum(liste_reward[time:])
+                                - self.agent.Q_ref[obs_or_time, past_action]
+                                )
                 self.agent.Q_ref[obs_or_time, past_action] += self.agent.ALPHA * TD_err_ref
                 if self.ignore_pi:
                     mult_pi = 1
