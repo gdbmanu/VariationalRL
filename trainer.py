@@ -122,11 +122,11 @@ class Trainer():
             Q_mult = 1
         if done:
             if past_time is None:
-                return reward - self.agent.Q_var[past_obs, past_action] - Q_mult * self.KL_diff(past_obs, past_action,
+                return self.agent.BETA * (reward - self.agent.Q_var[past_obs, past_action]) - Q_mult * self.KL_diff(past_obs, past_action,
                                                                                                 obs,
                                                                                                 past_time=past_time)
             else:
-                return reward - self.agent.Q_var[past_time, past_action] - Q_mult * self.KL_diff(past_obs, past_action,
+                return self.agent.BETA * (reward - self.agent.Q_var[past_time, past_action]) - Q_mult * self.KL_diff(past_obs, past_action,
                                                                                                  obs,
                                                                                                  past_time=past_time)
         else:
@@ -138,10 +138,12 @@ class Trainer():
                 Q_ref = self.agent.Q_ref[current_time, :]
                 Q_var = self.agent.Q_var[past_time, past_action]
                 obs_or_time = current_time
-            return reward + \
-                   self.agent.GAMMA * self.agent.softmax_expectation(obs_or_time,
-                                                                     Q=Q_ref) - \
-                   Q_var - \
+            return self.agent.BETA * (
+                            reward +
+                            self.agent.GAMMA * self.agent.softmax_expectation(obs_or_time,
+                                                                      Q=Q_ref) -
+                            Q_var
+                        ) - \
                    Q_mult * self.KL_diff(past_obs, past_action, obs, done=done, past_time=past_time)
 
     def BETA_err(self, past_obs, past_action, obs, past_time=None):
@@ -226,9 +228,11 @@ class Trainer():
                     mult_pi = 1
                 else:
                     mult_pi = 1 - pi
-                TD_err_var = np.sum(liste_reward[time:]) \
-                             - self.agent.Q_var[obs_or_time, past_action] \
-                             - Q_mult * self.agent.BETA * mult_pi * np.sum(liste_KL[time:])
+                TD_err_var = self.agent.BETA * (
+                                np.sum(liste_reward[time:])
+                                - self.agent.Q_var[obs_or_time, past_action]
+                                - Q_mult *  mult_pi * np.sum(liste_KL[time:])
+                            )
                 self.agent.Q_var[obs_or_time, past_action] += self.agent.ALPHA * TD_err_var
                 # BETA_err = - Q_mult * (self.agent.Q_var[time, past_action]
                 #            - self.agent.softmax_expectation(time)) \
