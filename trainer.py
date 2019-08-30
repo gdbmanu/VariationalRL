@@ -216,7 +216,7 @@ class Trainer():
                     past_obs_or_time = self.trajectory[time]
                 past_action = self.action_history[time]
 
-                #pi = self.agent.softmax(past_obs_or_time)[past_action]
+                pi = self.agent.softmax(past_obs_or_time)[past_action]
 
                 # TD_err_ref = self.agent.BETA * (
                 #                 np.sum(liste_reward[time:])
@@ -226,10 +226,10 @@ class Trainer():
                              - self.agent.Q_ref[past_obs_or_time, past_action]
                 self.agent.Q_ref[past_obs_or_time, past_action] += self.agent.ALPHA * TD_err_ref
 
-                #if self.ignore_pi:
-                #    mult_pi = 1
-                #else:
-                #    mult_pi = 1 - pi
+                if self.ignore_pi:
+                    mult_pi = 1
+                else:
+                    mult_pi = 1 - pi
 
                 # TD_err_var = self.agent.BETA * (
                 #                 np.sum(liste_reward[time:])
@@ -239,7 +239,7 @@ class Trainer():
                 # )
                 TD_err_var = np.sum(liste_reward[time:]) \
                         - self.agent.Q_var[past_obs_or_time, past_action] \
-                        - mult_Q * np.sum(liste_KL[time:])
+                        - mult_Q * mult_pi * np.sum(liste_KL[time:])
                 # - mult_Q *  mult_pi * np.sum(liste_KL[time:])
 
                 # diff_Q = np.sum(liste_reward[time:]) - self.agent.Q_var[past_obs_or_time, past_action]
