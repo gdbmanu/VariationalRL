@@ -129,7 +129,7 @@ class Trainer():
             return self.agent.BETA * (reward - self.agent.Q_var[past_obs_or_time, past_action]) \
                    - Q_mult * self.KL_diff(past_obs, past_action, obs, past_time=past_time)
         else:
-            if past_time is None:
+            if not self.agent.isTime:
                 Q_ref = self.agent.Q_ref[obs, :]
                 Q_var = self.agent.Q_var[past_obs, past_action]
                 obs_or_time = obs
@@ -149,7 +149,7 @@ class Trainer():
             Q_mult = 0
         else:
             Q_mult = 1
-        if past_time is None:
+        if not self.agent.isTime:
             obs_or_time = past_obs
         else:
             obs_or_time = past_time
