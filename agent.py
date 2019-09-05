@@ -37,10 +37,14 @@ class Agent:
         return curr_obs, action, new_obs, reward, done
         #self.total_reward += reward
 
-    def softmax(self, obs):
+    def softmax(self, obs, Q = None):
+        if Q is None:
+            Q_obs = self.Q_var[obs, :]
+        else:
+            Q_obs = Q[obs, :]
         act_score = np.zeros(self.env.N_act)
         for a in range(self.env.N_act):
-            act_score[a] = np.exp(self.BETA * self.Q_var[obs, a])
+            act_score[a] = np.exp(self.BETA * Q_obs[a])
         return act_score / np.sum(act_score)
 
     def softmax_choice(self, obs):

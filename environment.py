@@ -79,7 +79,7 @@ class Environment:
         return cls(direction, next, reward, initial_state_range=initial_state_range, total_steps=7)
 
     @classmethod
-    def square(cls, initial_state_range=0, side = 10):
+    def square(cls, initial_state_range=0, side = 10, index_reward = None):
         direction = {
             0: "E",
             1: "S",
@@ -103,7 +103,10 @@ class Environment:
                 if i > 0:
                     next[state]["N"] = state - side
 
-        reward[side*side-1] = 1
+        if index_reward is None:
+            reward[side*side-1] = 1
+        else:
+            reward[index_reward] = 1
 
         print(next)
         print(reward)
