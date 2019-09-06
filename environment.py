@@ -96,12 +96,20 @@ class Environment:
                 next[state] = {}
                 if j < side - 1:
                     next[state]["E"] = state + 1
+                else:
+                    next[state]["E"] = state
                 if j > 0:
                     next[state]["W"] = state - 1
+                else:
+                    next[state]["W"] = state
                 if i < side - 1:
                     next[state]["S"] = state + side
+                else:
+                    next[state]["S"] = state
                 if i > 0:
                     next[state]["N"] = state - side
+                else:
+                    next[state]["N"] = state
 
         if index_reward is None:
             reward[side*side-1] = 1

@@ -116,7 +116,7 @@ class Trainer():
         return sum_future_rewards
     
     def calc_TD_err_ref(self, sum_future_rewards, past_obs_or_time, past_action):
-        return sum_future_rewards - self.agent.Q_ref[past_obs_or_time, past_action]
+        return self.agent.BETA * (sum_future_rewards - self.agent.Q_ref[past_obs_or_time, past_action])
         
     def online_TD_err_ref(self, past_obs_or_time, past_action, obs_or_time, reward, done=False):
         sum_future_rewards = self.calc_sum_future_rewards(reward, done, obs_or_time)
@@ -174,11 +174,12 @@ class Trainer():
         else:
             past_obs_or_time = past_obs
             obs_or_time = obs
-        self.agent.KL[past_obs, past_action] += self.agent.ALPHA * self.online_KL_err(past_obs,
-                                                                                      past_action,
-                                                                                      obs,
-                                                                                      obs_or_time,
-                                                                                      done=done)
+        if not self.Q_learning:
+            self.agent.KL[past_obs, past_action] += self.agent.ALPHA * 30 * self.online_KL_err(past_obs,
+                                                                                          past_action,
+                                                                                          obs,
+                                                                                          obs_or_time,
+                                                                                          done=done)
         self.agent.Q_ref[past_obs_or_time, past_action] += self.agent.ALPHA * self.online_TD_err_ref(past_obs_or_time,
                                                                                               past_action,
                                                                                               obs_or_time,
@@ -391,7 +392,7 @@ class Final_variational_trainer(Trainer):
                          ref_prob=ref_prob,
                          final=final,
                          monte_carlo=monte_carlo,
-                         Q_learning=False,
+                         Q_learning=Q_learning,
                          KL_reward=KL_reward,
                          ignore_pi=ignore_pi)
 
