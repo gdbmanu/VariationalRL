@@ -1,40 +1,74 @@
 import numpy as np
+import gym
+from environment import Environment
+import torch
+import torch.nn as nn
 
 class Agent:
 
     def __init__(self, env, ALPHA=0.1, GAMMA=0.9, BETA = 1, isTime=False, do_reward = True):
         #self.total_reward = 0.0
         self.env = env
+        self.init_env()
         self.ALPHA = ALPHA
         self.GAMMA = GAMMA
         self.BETA = BETA
         self.num_episode = 0
         self.do_reward = do_reward
         self.isTime = isTime
-        if isTime:
-            self.Q_ref = np.zeros((self.env.total_steps, self.env.N_act))  # target Q
-            self.Q_var = np.zeros((self.env.total_steps, self.env.N_act))  # variational Q
+        self.isGym = type(env) is not Environment
+        if self.isGym:
+            N_INPUT = np.prod(env.observation_space.shape) + env.action_space.n
+            N_HIDDEN = 50
+            self.KL = nn.Sequential(
+                nn.Linear(N_INPUT, N_HIDDEN, bias=True),
+                nn.ReLU(),
+                nn.Linear(N_HIDDEN, 1, bias=True)
+            )
+            self.Q_ref = nn.Sequential(
+                nn.Linear(N_INPUT, N_HIDDEN, bias=True),
+                nn.ReLU(),
+                nn.Linear(N_HIDDEN, 1, bias=True)
+            )
+            self.Q_var = nn.Sequential(
+                nn.Linear(N_INPUT, N_HIDDEN, bias=True),
+                nn.ReLU(),
+                nn.Linear(N_HIDDEN, 1, bias=True)
+            )
         else:
-            self.Q_ref = np.zeros((self.env.N_obs, self.env.N_act))  # target Q
-            self.Q_var = np.zeros((self.env.N_obs, self.env.N_act))  # variational Q
-        self.KL = np.zeros((self.env.N_obs, self.env.N_act))
+            if isTime:
+                self.Q_ref = np.zeros((self.env.total_steps, self.env.N_act))  # target Q
+                self.Q_var = np.zeros((self.env.total_steps, self.env.N_act))  # variational Q
+            else:
+                self.Q_ref = np.zeros((self.env.N_obs, self.env.N_act))  # target Q
+                self.Q_var = np.zeros((self.env.N_obs, self.env.N_act))  # variational Q
+            self.KL = np.zeros((self.env.N_obs, self.env.N_act))
 
 
     @classmethod
     def timeAgent(cls, env, ALPHA=0.1, GAMMA=0.9, BETA = 1, do_reward=False):
         return cls(env, ALPHA=ALPHA, GAMMA=GAMMA, BETA=BETA, isTime=True, do_reward=do_reward)
 
-    def init_env(self, total_steps=10):
-        self.env.env_initialize()
+    def init_env(self):
+        self.observation = self.env.reset()
+        self.time = 0
+        return self.env.reset()
+
+    def get_observation(self):
+        return self.observation
+
+    def get_time(self):
+        return self.time
 
     def step(self):
         if self.isTime:
-            curr_obs = self.env.get_time()
+            curr_obs_or_time = self.get_time()
         else:
-            curr_obs = self.env.get_observation()
-        action = self.softmax_choice(curr_obs)
-        new_obs, reward, done = self.env.act(action)
-        return curr_obs, action, new_obs, reward, done
+            curr_obs_or_time = self.get_observation()
+        action = self.softmax_choice(curr_obs_or_time)
+        new_obs, reward, done, _ = self.env.step(action)
+        self.time += 1
+        return curr_obs_or_time, action, new_obs, reward, done
         #self.total_reward += reward
 
     def softmax(self, obs, Q = None):

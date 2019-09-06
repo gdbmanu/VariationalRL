@@ -199,7 +199,7 @@ class Trainer():
 
     def monte_carlo_update(self, done):
         if done:
-            current_time = self.agent.env.get_time()
+            current_time = self.agent.get_time()
             liste_KL = np.zeros(current_time)
             liste_reward = np.zeros(current_time)
             for time in range(current_time):
@@ -264,15 +264,15 @@ class Trainer():
     def run_episode(self):
         self.agent.init_env()
         self.init_trial()
-        self.trajectory.append(self.agent.env.get_observation())
+        self.trajectory.append(self.agent.get_observation())
 
         while True:
 
-            past_time = self.agent.env.get_time()
-            past_obs = self.agent.env.get_observation()
+            past_time = self.agent.get_time()
+            past_obs = self.agent.get_observation()
             past_obs_or_time, past_action, obs_or_time, reward, done = self.agent.step()
-            current_time = self.agent.env.get_time()
-            obs = self.agent.env.get_observation()
+            current_time = self.agent.get_time()
+            obs = self.agent.get_observation()
 
             self.action_history.append(past_action)
             self.trajectory.append(obs)

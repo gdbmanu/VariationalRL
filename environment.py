@@ -10,12 +10,13 @@ class Environment:
         self.N_act = len(direction)
         self.total_steps = total_steps
         self.initial_state_range = initial_state_range
-        self.env_initialize()
+        self.reset()
 
-    def env_initialize(self):
+    def reset(self):
         self.state = random.randint(0, self.initial_state_range)
         self.time = 0
         self.steps_left = self.total_steps
+        return self.state
 
     @classmethod
     def tp1(cls, initial_state_range=4):
@@ -122,27 +123,21 @@ class Environment:
         return cls(direction, next, reward, initial_state_range=initial_state_range, total_steps=2*(side-1))
 
 
-    def get_observation(self):
-        return self.state
-
-    def get_time(self):
-        return self.time
-
     def get_directions(self):
         return list(self.next[self.state].keys())
 
     def is_done(self):
         return self.steps_left == 0
 
-    def act(self, action):
+    def step(self, action):
         if self.is_done():
             raise Exception("Game is over")
         self.steps_left -= 1
         self.time += 1
         if self.direction[action] in self.get_directions():
             self.state = self.next[self.state][self.direction[action]]
-            return self.state, self.reward[self.state], self.is_done()
+            return self.state, self.reward[self.state], self.is_done(), None
         else:
-            return self.state, 0, self.is_done()
+            return self.state, 0, self.is_done(), None
 
 
