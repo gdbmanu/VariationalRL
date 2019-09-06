@@ -26,9 +26,9 @@ for i in range(N):
     print("Total reward got: %.4f" % trainer.total_reward)
     print("BETA :", agent.BETA)
 #
-print('Q_ref', agent.Q_ref)
-print('KL', agent.KL)
-print('Q_var', agent.Q_var)
+print('Q_ref', agent.Q_ref_tab)
+print('KL', agent.KL_tab)
+print('Q_var', agent.Q_var_tab)
 print(trainer.nb_visits_final)
 print(trainer.obs_score_final)
 #while not env.is_done():

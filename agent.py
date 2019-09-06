@@ -20,29 +20,29 @@ class Agent:
         if self.isGym:
             N_INPUT = np.prod(env.observation_space.shape) + env.action_space.n
             N_HIDDEN = 50
-            self.KL = nn.Sequential(
+            self.KL_nn = nn.Sequential(
                 nn.Linear(N_INPUT, N_HIDDEN, bias=True),
                 nn.ReLU(),
                 nn.Linear(N_HIDDEN, 1, bias=True)
             )
-            self.Q_ref = nn.Sequential(
+            self.Q_ref_nn = nn.Sequential(
                 nn.Linear(N_INPUT, N_HIDDEN, bias=True),
                 nn.ReLU(),
                 nn.Linear(N_HIDDEN, 1, bias=True)
             )
-            self.Q_var = nn.Sequential(
+            self.Q_var_nn = nn.Sequential(
                 nn.Linear(N_INPUT, N_HIDDEN, bias=True),
                 nn.ReLU(),
                 nn.Linear(N_HIDDEN, 1, bias=True)
             )
         else:
             if isTime:
-                self.Q_ref = np.zeros((self.env.total_steps, self.env.N_act))  # target Q
-                self.Q_var = np.zeros((self.env.total_steps, self.env.N_act))  # variational Q
+                self.Q_ref_tab = np.zeros((self.env.total_steps, self.env.N_act))  # target Q
+                self.Q_var_tab = np.zeros((self.env.total_steps, self.env.N_act))  # variational Q
             else:
-                self.Q_ref = np.zeros((self.env.N_obs, self.env.N_act))  # target Q
-                self.Q_var = np.zeros((self.env.N_obs, self.env.N_act))  # variational Q
-            self.KL = np.zeros((self.env.N_obs, self.env.N_act))
+                self.Q_ref_tab = np.zeros((self.env.N_obs, self.env.N_act))  # target Q
+                self.Q_var_tab = np.zeros((self.env.N_obs, self.env.N_act))  # variational Q
+            self.KL_tab = np.zeros((self.env.N_obs, self.env.N_act))
 
 
     @classmethod
@@ -52,6 +52,10 @@ class Agent:
     def init_env(self):
         self.observation = self.env.reset()
         self.time = 0
+        if not self.isGym:
+            self.N_act = self.env.N_act
+        else:
+            self.N_act = self.env.action_space.n
         return self.env.reset()
 
     def get_observation(self):
@@ -59,6 +63,66 @@ class Agent:
 
     def get_time(self):
         return self.time
+
+    def one_hot(self, act):
+        out = np.zeros(self.N_act)
+        out[act] = 1
+        return out
+
+    def KL(self, obs, act):
+        if not self.isGym:
+            return self.KL_tab[obs, act]
+        else:
+            input = np.concatenate((obs, self.one_hot(act)))
+            obs_tf = torch.FloatTensor([input])
+            return self.KL_nn(obs_tf).data.numpy()[0]
+
+    def Q_ref(self, obs_or_time, act):
+        if not self.isGym:
+            return self.Q_ref_tab[obs_or_time, act]
+        else:
+            input = np.concatenate((obs_or_time, self.one_hot(act)))
+            obs_tf = torch.FloatTensor([input])
+            return self.Q_ref_nn(obs_tf).data.numpy()[0]
+
+    def Q_var(self, obs_or_time, act):
+        if not self.isGym:
+            return self.Q_var_tab[obs_or_time, act]
+        else:
+            input = np.concatenate((obs_or_time, self.one_hot(act)))
+            obs_tf = torch.FloatTensor([input])
+            return self.Q_var_nn(obs_tf).data.numpy()[0]
+
+    def set_Q_obs(self, obs, Q=None):
+        # if not self.isGym:
+        #     if Q is None:
+        #         return self.Q_var_tab[obs, :]
+        #     else:
+        #         return Q[obs, :]
+        # else:
+        if Q is None:
+            Q = self.Q_var
+        Q_obs = np.zeros(self.N_act)
+        for a in range(self.N_act):
+            Q_obs[a] = Q(obs, a)
+        return Q_obs
+
+    def softmax(self, obs, Q=None):
+        Q_obs = self.set_Q_obs(obs, Q=Q)
+        act_score = np.zeros(self.N_act)
+        for a in range(self.N_act):
+            act_score[a] = np.exp(self.BETA * Q_obs[a])
+        return act_score / np.sum(act_score)
+
+    def softmax_choice(self, obs):
+        act_probs = self.softmax(obs)
+        action = np.random.choice(self.N_act, p=act_probs)
+        return action
+
+    def softmax_expectation(self, obs, next_values):
+        act_probs = self.softmax(obs)
+        #Q_obs = self.set_Q_obs(obs, Q=Q)
+        return np.dot(act_probs, next_values)
 
     def step(self):
         if self.isTime:
@@ -69,31 +133,10 @@ class Agent:
         new_obs, reward, done, _ = self.env.step(action)
         self.time += 1
         return curr_obs_or_time, action, new_obs, reward, done
-        #self.total_reward += reward
+        # self.total_reward += reward
 
-    def softmax(self, obs, Q = None):
-        if Q is None:
-            Q_obs = self.Q_var[obs, :]
-        else:
-            Q_obs = Q[obs, :]
-        act_score = np.zeros(self.env.N_act)
-        for a in range(self.env.N_act):
-            act_score[a] = np.exp(self.BETA * Q_obs[a])
-        return act_score / np.sum(act_score)
 
-    def softmax_choice(self, obs):
-        act_probs = self.softmax(obs)
-        action = np.random.choice(len(act_probs), p=act_probs)
-        return action
-
-    def softmax_expectation(self, obs, Q = None):
-        act_probs = self.softmax(obs)
-        if Q is None:
-            return np.dot(act_probs, self.Q_var[obs,:])
-        else:
-            #act_probs = self.softmax(obs, Q = Q)
-            return np.dot(act_probs, Q)
-
+    ## OBSOLETE ??
     def calc_state_probs(self, obs):
         act_probs = self.softmax(obs)
         state_probs = np.zeros(self.env.N_obs)
