@@ -9,6 +9,7 @@ class Agent:
     def __init__(self, env, ALPHA=0.1, GAMMA=0.9, BETA = 1, isTime=False, do_reward = True):
         #self.total_reward = 0.0
         self.env = env
+        self.isGym = type(env) is not Environment
         self.init_env()
         self.ALPHA = ALPHA
         self.GAMMA = GAMMA
@@ -16,9 +17,8 @@ class Agent:
         self.num_episode = 0
         self.do_reward = do_reward
         self.isTime = isTime
-        self.isGym = type(env) is not Environment
         if self.isGym:
-            N_INPUT = np.prod(env.observation_space.shape) + env.action_space.n
+            N_INPUT = self.N_obs + self.N_act
             N_HIDDEN = 50
             self.KL_nn = nn.Sequential(
                 nn.Linear(N_INPUT, N_HIDDEN, bias=True),
@@ -37,12 +37,12 @@ class Agent:
             )
         else:
             if isTime:
-                self.Q_ref_tab = np.zeros((self.env.total_steps, self.env.N_act))  # target Q
-                self.Q_var_tab = np.zeros((self.env.total_steps, self.env.N_act))  # variational Q
+                self.Q_ref_tab = np.zeros((self.env.total_steps, self.N_act))  # target Q
+                self.Q_var_tab = np.zeros((self.env.total_steps, self.N_act))  # variational Q
             else:
-                self.Q_ref_tab = np.zeros((self.env.N_obs, self.env.N_act))  # target Q
-                self.Q_var_tab = np.zeros((self.env.N_obs, self.env.N_act))  # variational Q
-            self.KL_tab = np.zeros((self.env.N_obs, self.env.N_act))
+                self.Q_ref_tab = np.zeros((self.N_obs, self.N_act))  # target Q
+                self.Q_var_tab = np.zeros((self.N_obs, self.N_act))  # variational Q
+            self.KL_tab = np.zeros((self.N_obs, self.N_act))
 
 
     @classmethod
@@ -54,8 +54,10 @@ class Agent:
         self.time = 0
         if not self.isGym:
             self.N_act = self.env.N_act
+            self.N_obs = self.env.N_obs
         else:
             self.N_act = self.env.action_space.n
+            self.N_obs = np.prod(self.env.observation_space.shape)
         return self.env.reset()
 
     def get_observation(self):
@@ -131,6 +133,7 @@ class Agent:
             curr_obs_or_time = self.get_observation()
         action = self.softmax_choice(curr_obs_or_time)
         new_obs, reward, done, _ = self.env.step(action)
+        self.observation = new_obs
         self.time += 1
         return curr_obs_or_time, action, new_obs, reward, done
         # self.total_reward += reward
@@ -139,8 +142,8 @@ class Agent:
     ## OBSOLETE ??
     def calc_state_probs(self, obs):
         act_probs = self.softmax(obs)
-        state_probs = np.zeros(self.env.N_obs)
-        for a in range(self.env.N_act):
+        state_probs = np.zeros(self.N_obs)
+        for a in range(self.N_act):
             if self.env.direction[a] in self.env.next[obs]:
                 state_probs[self.env.next[obs][self.env.direction[a]]] += act_probs[a]
             else:

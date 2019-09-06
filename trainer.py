@@ -49,7 +49,7 @@ class Trainer():
             mu = np.mean(self.mem_obs, axis = 0)
             Sigma = np.cov(np.array(self.mem_obs).T)
             rv = multivariate_normal(mu, Sigma)
-            return rv.pdf(self.agent.get_observation())
+            return rv.pdf # !! TODO a verifier  
 
     def calc_final_state_probs(self):
         # return self.nb_visits/np.sum(self.nb_visits)
@@ -59,15 +59,19 @@ class Trainer():
             mu = np.mean(self.mem_obs_final, axis=0)
             Sigma = np.cov(np.array(self.mem_obs_final).T)
             rv = multivariate_normal(mu, Sigma)
-            return rv.pdf(self.agent.get_observation())
+            return rv.pdf # !! TODO a verifier 
 
-    def calc_ref_probs(self, obs, EPSILON=1e-3):
-
+    def calc_ref_probs(self, obs, EPSILON=1e-3, final=False):
         if self.ref_prob == 'unif':
             # EXPLORATION DRIVE
             if not self.agent.isGym:
-                p = np.zeros(self.agent.env.N_obs)
-                p[np.where(self.nb_visits > 0)] = 1 / np.sum(self.nb_visits > 0)
+                p = np.zeros(self.agent.N_obs)
+                if self.final:
+                    ## !!!! A revoir TODO !!!!!!!!
+                    p[np.where(self.nb_visits > 0)] = 1 / np.sum(self.nb_visits > 0) 
+                    # p[np.where(self.nb_visits_final > 0)] = 1 / np.sum(self.nb_visits_final > 0)
+                else:
+                    p[np.where(self.nb_visits > 0)] = 1 / np.sum(self.nb_visits > 0)
                 return p
             else:
                 return 1 / np.prod(self.agent.env.observation_space.high - self.agent.env.observation_space.low)
@@ -83,9 +87,9 @@ class Trainer():
     def KL(self, final_obs, done=False):
         if self.final: # Only final state for probability calculation
             if done:
-                state_probs = self.calc_final_state_probs()
+                final_state_probs = self.calc_final_state_probs()
                 ref_probs = self.calc_ref_probs(final_obs, EPSILON=self.EPSILON)
-                return np.log(state_probs[final_obs]) - np.log(ref_probs[final_obs])  # +1
+                return np.log(final_state_probs[final_obs]) - np.log(ref_probs[final_obs])  # +1
             else:
                 return 0  # self.agent.KL_tab[past_obs, a]
         else:
@@ -100,7 +104,7 @@ class Trainer():
         if not done:
             next_sum = self.agent.softmax_expectation(obs_or_time, self.agent.KL_tab[obs, :])
             sum_future_KL += self.agent.GAMMA * next_sum                                                            
-        return sum_future_KL - self.agent.KL[past_obs, past_action]
+        return sum_future_KL - self.agent.KL(past_obs, past_action)
             
     def KL_diff(self, past_obs, a, new_obs, done=False, past_time=None):
         return 0
@@ -253,7 +257,7 @@ class Trainer():
             self.action_history.append(past_action)
             self.trajectory.append(obs)
 
-            if not self.final:
+            if True: #not self.final:
                 if not self.agent.isGym:
                     self.nb_visits[obs] += 1
                     self.obs_score *= 1 - self.OBS_LEAK
@@ -284,9 +288,9 @@ class Trainer():
 
             if done:
                 if self.nb_trials % 100 == 0 and not self.agent.isTime:
-                    V = np.zeros(self.agent.env.N_obs)
-                    for s in range(self.agent.env.N_obs):
-                        V[s] = self.agent.softmax_expectation(s)
+                    V = np.zeros(self.agent.N_obs)
+                    for obs in range(self.agent.N_obs):
+                        V[obs] = self.agent.softmax_expectation(obs, self.agent.set_Q_obs(obs))
                     self.mem_V[self.nb_trials] = V
                 break
 
