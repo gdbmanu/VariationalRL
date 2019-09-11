@@ -9,7 +9,7 @@ class Agent:
     def __init__(self, env, ALPHA=0.1, GAMMA=0.9, BETA = 1, isTime=False, do_reward = True):
         #self.total_reward = 0.0
         self.env = env
-        self.isGym = type(env) is not Environment
+        self.isDiscrete = type(env) is Environment or type(env) is gym.spaces.discrete.Discrete
         self.init_env()
         self.ALPHA = ALPHA
         self.GAMMA = GAMMA
@@ -17,7 +17,7 @@ class Agent:
         self.num_episode = 0
         self.do_reward = do_reward
         self.isTime = isTime
-        if self.isGym:
+        if not self.isDiscrete:
             N_INPUT = self.N_obs + self.N_act
             N_HIDDEN = 50
             self.KL_nn = nn.Sequential(
@@ -25,18 +25,21 @@ class Agent:
                 nn.ReLU(),
                 nn.Linear(N_HIDDEN, 1, bias=True)
             )
+            self.KL_optimizer = torch.optim.Adam(self.KL_nn.parameters(), lr = self.ALPHA * 10)
             self.Q_ref_nn = nn.Sequential(
                 nn.Linear(N_INPUT, N_HIDDEN, bias=True),
                 nn.ReLU(),
                 nn.Linear(N_HIDDEN, 1, bias=True)
             )
+            self.Q_ref_optimizer = torch.optim.Adam(self.Q_ref_nn.parameters(), lr = self.ALPHA)
             self.Q_var_nn = nn.Sequential(
                 nn.Linear(N_INPUT, N_HIDDEN, bias=True),
                 nn.ReLU(),
                 nn.Linear(N_HIDDEN, 1, bias=True)
             )
+            self.Q_var_optimizer = torch.optim.Adam(self.Q_var_nn.parameters(), lr=self.ALPHA)
         else:
-            if isTime:
+            if self.isTime:
                 self.Q_ref_tab = np.zeros((self.env.total_steps, self.N_act))  # target Q
                 self.Q_var_tab = np.zeros((self.env.total_steps, self.N_act))  # variational Q
             else:
@@ -52,7 +55,7 @@ class Agent:
     def init_env(self):
         self.observation = self.env.reset()
         self.time = 0
-        if not self.isGym:
+        if self.isDiscrete:
             self.N_act = self.env.N_act
             self.N_obs = self.env.N_obs
         else:
@@ -71,32 +74,49 @@ class Agent:
         out[act] = 1
         return out
 
-    def KL(self, obs, act):
-        if not self.isGym:
+    def tf_normalize(self, obs):
+        m = (self.env.observation_space.high + self.env.observation_space.low) / 2
+        diff = self.env.observation_space.high - self.env.observation_space.low
+        return (obs - m) / diff
+
+    def KL(self, obs, act, tf=False):
+        if self.isDiscrete:
             return self.KL_tab[obs, act]
         else:
-            input = np.concatenate((obs, self.one_hot(act)))
+            norm_obs = self.tf_normalize(obs)
+            input = np.concatenate((norm_obs, self.one_hot(act)))
             obs_tf = torch.FloatTensor([input])
-            return self.KL_nn(obs_tf).data.numpy()[0]
+            if tf:
+                return self.KL_nn(obs_tf)
+            else:
+                return self.KL_nn(obs_tf).data.numpy()[0]
 
-    def Q_ref(self, obs_or_time, act):
-        if not self.isGym:
+    def Q_ref(self, obs_or_time, act, tf=False):
+        if self.isDiscrete:
             return self.Q_ref_tab[obs_or_time, act]
         else:
-            input = np.concatenate((obs_or_time, self.one_hot(act)))
+            norm_obs_or_time = self.tf_normalize(obs_or_time)
+            input = np.concatenate((norm_obs_or_time, self.one_hot(act)))
             obs_tf = torch.FloatTensor([input])
-            return self.Q_ref_nn(obs_tf).data.numpy()[0]
+            if tf:
+                return self.Q_ref_nn(obs_tf)
+            else:
+                return self.Q_ref_nn(obs_tf).data.numpy()[0]
 
-    def Q_var(self, obs_or_time, act):
-        if not self.isGym:
+    def Q_var(self, obs_or_time, act, tf=False):
+        if self.isDiscrete:
             return self.Q_var_tab[obs_or_time, act]
         else:
-            input = np.concatenate((obs_or_time, self.one_hot(act)))
+            norm_obs_or_time = self.tf_normalize(obs_or_time)
+            input = np.concatenate((norm_obs_or_time, self.one_hot(act)))
             obs_tf = torch.FloatTensor([input])
-            return self.Q_var_nn(obs_tf).data.numpy()[0]
+            if tf:
+                return self.Q_var_nn(obs_tf)
+            else:
+                return self.Q_var_nn(obs_tf).data.numpy()[0]
 
     def set_Q_obs(self, obs, Q=None):
-        # if not self.isGym:
+        # if self.isDiscrete:
         #     if Q is None:
         #         return self.Q_var_tab[obs, :]
         #     else:
