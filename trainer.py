@@ -68,8 +68,8 @@ class Trainer():
                 p = np.zeros(self.agent.N_obs)
                 if self.final:
                     ## !!!! A revoir TODO !!!!!!!!
-                    p[np.where(self.nb_visits > 0)] = 1 / np.sum(self.nb_visits > 0) 
-                    # p[np.where(self.nb_visits_final > 0)] = 1 / np.sum(self.nb_visits_final > 0)
+                    #p[np.where(self.nb_visits > 0)] = 1 / np.sum(self.nb_visits > 0) 
+                    p[np.where(self.nb_visits_final > 0)] = 1 / np.sum(self.nb_visits_final > 0)
                 else:
                     p[np.where(self.nb_visits > 0)] = 1 / np.sum(self.nb_visits > 0)
                 return p
@@ -354,7 +354,7 @@ class One_step_variational_trainer(Trainer):
                          KL_reward=KL_reward,
                          ignore_pi=ignore_pi)
 
-    # agent.Q_var update # OBSOLETE ??
+    # agent.Q_var update # DEPRECATED ??
     def KL_diff(self, past_obs, a, new_obs, done=False, past_time=None):
         pi = self.agent.softmax(past_obs)[a]
         state_probs = self.agent.calc_state_probs(past_obs)
@@ -394,7 +394,7 @@ class Final_variational_trainer(Trainer):
         else:
             return (1 - pi) * self.agent.BETA * self.agent.KL[past_obs, a]  # self.KL(past_obs, a, final_obs, done)
 
-    ## OBSOLETE?
+    ## DEPRECATED?
     def BETA_err(self, past_obs, past_action, past_time=None):
         if self.Q_learning:
             mult_Q = 0

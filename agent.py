@@ -139,7 +139,7 @@ class Agent:
         # self.total_reward += reward
 
 
-    ## OBSOLETE ??
+    ## DEPRECATED ??
     def calc_state_probs(self, obs):
         act_probs = self.softmax(obs)
         state_probs = np.zeros(self.N_obs)
