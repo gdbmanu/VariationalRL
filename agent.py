@@ -27,7 +27,7 @@ class Agent:
                 #nn.ReLU(),
                 nn.Linear(N_HIDDEN, 1, bias=True)
             )
-            self.KL_optimizer = torch.optim.Adam(self.KL_nn.parameters(), lr = self.ALPHA * 3)
+            self.KL_optimizer = torch.optim.Adam(self.KL_nn.parameters(), lr = self.ALPHA * 30)
             self.Q_ref_nn = nn.Sequential(
                 nn.Linear(N_INPUT, N_HIDDEN, bias=True),
                 nn.ReLU(),
@@ -156,15 +156,15 @@ class Agent:
         else:
             act_score = np.zeros(self.N_act)
             m_Q = np.mean(Q_obs)
-        for a in range(self.N_act):
+            for a in range(self.N_act):
+                #if tf:
+                #    act_score[a] = torch.exp(self.BETA * (Q_obs[a] - m_Q))
+                #else:
+                    act_score[a] = np.exp(self.BETA * (Q_obs[a] - m_Q))
             #if tf:
-            #    act_score[a] = torch.exp(self.BETA * (Q_obs[a] - m_Q))
+            #    return act_score / torch.sum(act_score)
             #else:
-                act_score[a] = np.exp(self.BETA * (Q_obs[a] - m_Q))
-        #if tf:
-        #    return act_score / torch.sum(act_score)
-        #else:
-        return act_score / np.sum(act_score)
+            return act_score / np.sum(act_score)
 
     def softmax_choice(self, obs):
         act_probs = self.softmax(obs)
