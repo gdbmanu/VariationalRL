@@ -23,18 +23,24 @@ class Agent:
             self.KL_nn = nn.Sequential(
                 nn.Linear(N_INPUT, N_HIDDEN, bias=True),
                 nn.ReLU(),
+                #nn.Linear(N_HIDDEN, N_HIDDEN, bias=True),
+                #nn.ReLU(),
                 nn.Linear(N_HIDDEN, 1, bias=True)
             )
-            self.KL_optimizer = torch.optim.Adam(self.KL_nn.parameters(), lr = self.ALPHA * 10)
+            self.KL_optimizer = torch.optim.Adam(self.KL_nn.parameters(), lr = self.ALPHA * 3)
             self.Q_ref_nn = nn.Sequential(
                 nn.Linear(N_INPUT, N_HIDDEN, bias=True),
                 nn.ReLU(),
+                #nn.Linear(N_HIDDEN, N_HIDDEN, bias=True),
+                #nn.ReLU(),
                 nn.Linear(N_HIDDEN, 1, bias=True)
             )
             self.Q_ref_optimizer = torch.optim.Adam(self.Q_ref_nn.parameters(), lr = self.ALPHA)
             self.Q_var_nn = nn.Sequential(
                 nn.Linear(N_INPUT, N_HIDDEN, bias=True),
                 nn.ReLU(),
+                #nn.Linear(N_HIDDEN, N_HIDDEN, bias=True),
+                #nn.ReLU(),
                 nn.Linear(N_HIDDEN, 1, bias=True)
             )
             self.Q_var_optimizer = torch.optim.Adam(self.Q_var_nn.parameters(), lr=self.ALPHA)
@@ -115,7 +121,7 @@ class Agent:
             else:
                 return self.Q_var_nn(obs_tf).data.numpy()[0]
 
-    def set_Q_obs(self, obs, Q=None):
+    def set_Q_obs(self, obs, Q=None, tf=False):
         # if self.isDiscrete:
         #     if Q is None:
         #         return self.Q_var_tab[obs, :]
@@ -124,16 +130,40 @@ class Agent:
         # else:
         if Q is None:
             Q = self.Q_var
-        Q_obs = np.zeros(self.N_act)
+        if tf:
+            pass # Q_obs = torch.zeros(self.N_act)
+        else:
+            Q_obs = np.zeros(self.N_act)
         for a in range(self.N_act):
-            Q_obs[a] = Q(obs, a)
+            if tf:
+                if a == 0:
+                    Q_obs = Q(obs, a, tf=tf)
+                else:
+                    Q_obs = torch.cat((Q_obs, Q(obs, a, tf=tf)), 0)
+            else:
+                Q_obs[a] = Q(obs, a, tf=tf)
+        
         return Q_obs
+        
 
-    def softmax(self, obs, Q=None):
-        Q_obs = self.set_Q_obs(obs, Q=Q)
-        act_score = np.zeros(self.N_act)
+    def softmax(self, obs, Q=None, tf=False):
+        Q_obs = self.set_Q_obs(obs, Q=Q, tf=tf)
+        if tf:
+            p = torch.nn.Softmax(dim=0)(self.BETA * Q_obs)
+            return p.view(self.N_act)
+            #act_score = torch.zeros(self.N_act)
+            #m_Q = torch.mean(Q_obs)
+        else:
+            act_score = np.zeros(self.N_act)
+            m_Q = np.mean(Q_obs)
         for a in range(self.N_act):
-            act_score[a] = np.exp(self.BETA * Q_obs[a])
+            #if tf:
+            #    act_score[a] = torch.exp(self.BETA * (Q_obs[a] - m_Q))
+            #else:
+                act_score[a] = np.exp(self.BETA * (Q_obs[a] - m_Q))
+        #if tf:
+        #    return act_score / torch.sum(act_score)
+        #else:
         return act_score / np.sum(act_score)
 
     def softmax_choice(self, obs):
@@ -141,10 +171,13 @@ class Agent:
         action = np.random.choice(self.N_act, p=act_probs)
         return action
 
-    def softmax_expectation(self, obs, next_values):
-        act_probs = self.softmax(obs)
+    def softmax_expectation(self, obs, next_values, tf=False):
+        act_probs = self.softmax(obs, tf=tf)
         #Q_obs = self.set_Q_obs(obs, Q=Q)
-        return np.dot(act_probs, next_values)
+        if tf:
+            return torch.dot(act_probs, next_values.view(self.N_act))
+        else:
+            return np.dot(act_probs, next_values)
 
     def step(self):
         if self.isTime:
