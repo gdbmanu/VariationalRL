@@ -24,6 +24,9 @@ class Trainer():
         else:
             self.mem_obs = []
             self.mem_obs_final = []
+        if self.agent.continuousAction:
+            self.mem_act = []
+        self.mem_total_reward = []
         self.OBS_LEAK = OBS_LEAK
         self.EPSILON = EPSILON
         self.mem_V = {}
@@ -47,19 +50,42 @@ class Trainer():
         if self.agent.isDiscrete:
             return self.obs_score / np.sum(self.obs_score)
         else:
-            b_inf = min(1000, len(self.mem_obs))
+            b_inf = min(0, len(self.mem_obs))
             mu = np.mean(self.mem_obs[-b_inf:], axis = 0)
             Sigma = np.cov(np.array(self.mem_obs[-b_inf:]).T)
             try:
                 rv = multivariate_normal(mu, Sigma)
             except:
                 try:
-                    var = np.var(trainer.mem_obs_final, axis=0)
+                    var = np.var(trainer.mem_obs, axis=0)
                     rv = multivariate_normal(mu, var)
                 except:
                     rv = multivariate_normal(mu, np.ones(len(mu)))
             return rv.pdf # !! TODO a verifier  
 
+    def set_actions_set(self):
+        b_inf = min(10000, len(self.mem_act))
+        if b_inf > 0:
+            mu = np.mean(self.mem_act[-b_inf:], axis = 0)
+            if b_inf >= 10000:
+                Sigma = np.cov(np.array(self.mem_act[-b_inf:]).T)
+            else:
+                Sigma = np.diag(np.ones(len(mu)))
+        else:
+            mu = np.zeros(self.agent.N_act)
+            Sigma = np.diag(np.ones(len(mu)))
+        actions_set = []
+        for indice_act in range(10):
+            if len(mu) == 1:
+                act = np.random.normal(mu, Sigma)
+                act = np.array(act[0])
+            else:
+                act = np.random.multivariate_normal(mu, Sigma)
+            act = np.clip(act, self.agent.act_low, self.agent.act_high)
+            actions_set += [act]
+        return actions_set
+        
+        
     def calc_final_state_probs(self):
         # return self.nb_visits/np.sum(self.nb_visits)
         if self.agent.isDiscrete:
@@ -90,7 +116,13 @@ class Trainer():
                     p[np.where(self.nb_visits > 0)] = 1 / np.sum(self.nb_visits > 0)
                 return p
             else:
-                return 1 / np.prod(self.agent.env.observation_space.high - self.agent.env.observation_space.low)
+                b_inf = min(10000, len(self.mem_obs))
+                high = np.max(self.mem_obs[-b_inf:], axis = 0)
+                low = np.min(self.mem_obs[-b_inf:], axis = 0)
+                if np.prod(high - low) > 0:
+                    return 1 / np.prod(high - low)
+                else:
+                    return 1
         else:
             # SET POINT
             if self.agent.isDiscrete:
@@ -122,13 +154,13 @@ class Trainer():
                     print('obs :', final_obs, ', KL loss : ', np.log(state_probs(final_obs)) - np.log(ref_probs))
                 return np.log(state_probs(final_obs)) - np.log(ref_probs)  # +1
 
-    def calc_sum_future_KL(self, obs, obs_or_time, done, tf=False):
+    def calc_sum_future_KL(self, obs, obs_or_time, done, tf=False, actions_set=None):
         sum_future_KL = self.KL(obs, done=done)
         if tf:
             sum_future_KL = torch.FloatTensor([sum_future_KL])      
         if not done:
-            next_values = self.agent.set_Q_obs(obs, Q=self.agent.KL, tf=tf)
-            next_sum = self.agent.softmax_expectation(obs, next_values, tf=tf)
+            next_values = self.agent.set_Q_obs(obs, Q=self.agent.KL, tf=tf, actions_set=actions_set)
+            next_sum = self.agent.softmax_expectation(obs, next_values, tf=tf, actions_set=actions_set)
             sum_future_KL += self.agent.GAMMA * next_sum
         return sum_future_KL
 
@@ -142,21 +174,27 @@ class Trainer():
         sum_future_KL = self.calc_sum_future_KL(obs, obs_or_time, done)
         return sum_future_KL - self.agent.KL(past_obs, past_action)
 
-    def KL_loss_tf(self, KL_pred_tf, obs, done): # Q TD_error
-        sum_future_KL = self.calc_sum_future_KL(obs, obs, done, tf=False) # not tf=True!!!
+    def KL_loss_tf(self, KL_pred_tf, obs, done, actions_set=None): # Q TD_error
+        sum_future_KL = self.calc_sum_future_KL(obs, obs, done, tf=False, actions_set=actions_set) # not tf=True!!!
         sum_future_KL_tf = torch.FloatTensor([sum_future_KL])
         return torch.sum(torch.pow(self.agent.BETA * (sum_future_KL_tf - KL_pred_tf), 2), 1)
             
     def KL_diff(self, past_obs, a, new_obs, done=False, past_time=None):
         return 0
 
-    def calc_sum_future_rewards(self, reward, obs_or_time, done, tf=False):
+    def calc_sum_future_rewards(self, reward, obs_or_time, done, tf=False, actions_set=None):
         sum_future_rewards = reward
         if tf:
             sum_future_rewards = torch.FloatTensor([sum_future_rewards])
         if not done:
-            next_values = self.agent.set_Q_obs(obs_or_time, Q=self.agent.Q_ref, tf=tf)
-            sum_future_rewards += self.agent.GAMMA * self.agent.softmax_expectation(obs_or_time, next_values, tf=tf)
+            next_values = self.agent.set_Q_obs(obs_or_time, 
+                                               Q=self.agent.Q_ref, 
+                                               tf=tf, 
+                                               actions_set=actions_set)
+            sum_future_rewards += self.agent.GAMMA * self.agent.softmax_expectation(obs_or_time, 
+                                                                                    next_values, 
+                                                                                    tf=tf, 
+                                                                                    actions_set=actions_set)
         
         return sum_future_rewards
     
@@ -167,10 +205,11 @@ class Trainer():
         sum_future_rewards = self.calc_sum_future_rewards(reward, obs_or_time, done)
         return self.calc_TD_err_ref(sum_future_rewards, past_obs_or_time, past_action)
 
-    def Q_ref_loss_tf(self, Q_ref_pred_tf, obs, reward, done):
-        sum_future_rewards = self.calc_sum_future_rewards(reward, obs, done)
+    def Q_ref_loss_tf(self, Q_ref_pred_tf, obs, reward, done, actions_set=None):
+        sum_future_rewards = self.calc_sum_future_rewards(reward, obs, done, actions_set=actions_set)
         sum_future_rewards_tf = torch.FloatTensor([sum_future_rewards])
-        return torch.sum(torch.pow(self.agent.BETA * (sum_future_rewards_tf - Q_ref_pred_tf), 2), 1)
+        #return torch.sum(self.agent.BETA * torch.pow((sum_future_rewards_tf - Q_ref_pred_tf), 2), 1)
+        return 0.5 * torch.pow((sum_future_rewards_tf - Q_ref_pred_tf), 2)
 
     def calc_TD_err_var(self, sum_future_rewards, sum_future_KL, past_obs, past_obs_or_time, past_action):
         if self.Q_learning:
@@ -191,10 +230,10 @@ class Trainer():
         return self.calc_TD_err_var(sum_future_rewards, sum_future_KL, past_obs, past_obs_or_time, past_action)
 
     def Q_var_loss_tf(self, Q_var_pred_tf, KL_pred_tf, obs, reward, done):
-        if self.Q_learning:
-            mult_Q = 0
-        else:
-            mult_Q = 1
+        #if self.Q_learning:
+        #    mult_Q = 0
+        #else:
+        #    mult_Q = 1
         sum_future_rewards = self.calc_sum_future_rewards(reward, obs, done, tf=False)
         sum_future_rewards_tf = torch.FloatTensor([sum_future_rewards])
         #sum_future_KL_tf = self.agent.KL(past_obs, past_action, tf=True)
@@ -207,12 +246,12 @@ class Trainer():
         #mult_pi = 1 - pi
         #target_tf = torch.FloatTensor([sum_future_rewards - mult_pi * mult_Q * sum_future_KL])
         #return torch.sum(torch.pow(self.agent.BETA * (target_tf - Q_var_pred_tf), 2), 1)
-        return torch.sum(torch.pow(self.agent.BETA * (sum_future_rewards_tf - Q_var_pred_tf), 2) + KL_pred_tf, 1) 
+        return 0.5 * torch.pow((sum_future_rewards_tf - Q_var_pred_tf), 2) + KL_pred_tf
         #return torch.sum(KL_pred_tf)
 
 
 
-    def online_update(self, past_obs, past_action, obs, reward, done, past_time, current_time):
+    def online_update(self, past_obs, past_action, obs, reward, done, past_time, current_time, actions_set=None):
         if self.agent.isTime:
             past_obs_or_time = past_time
             obs_or_time = current_time
@@ -242,23 +281,32 @@ class Trainer():
             if not self.Q_learning:
                 KL_pred_tf = self.agent.KL(past_obs, past_action, tf=True)
                 #print(KL_pred_tf.detach().numpy(), self.KL(obs, done=done))
-                loss_KL = self.KL_loss_tf(KL_pred_tf, obs, done)
+                loss_KL = self.KL_loss_tf(KL_pred_tf, obs, done, actions_set=actions_set)
                 loss_KL.backward()
                 self.agent.KL_optimizer.step()
 
             if self.agent.do_reward:
                 Q_ref_pred_tf = self.agent.Q_ref(past_obs, past_action, tf=True)
-                loss_Q_ref = self.Q_ref_loss_tf(Q_ref_pred_tf, obs, reward, done)
+                loss_Q_ref = self.Q_ref_loss_tf(Q_ref_pred_tf, obs, reward, done, actions_set=actions_set)
                 loss_Q_ref.backward()
                 self.agent.Q_ref_optimizer.step()
                 
             if True:
                 Q_var_pred_tf = self.agent.Q_var(past_obs, past_action, tf=True)
-                KL_pred_tf = self.calc_sum_future_KL(past_obs, past_obs, done, tf=True) - torch.FloatTensor([self.KL(past_obs, done=done)])
-                #loss_Q_var = self.Q_ref_loss_tf(Q_var_pred_tf, obs, reward, done) 
-                loss_Q_var = self.Q_var_loss_tf(Q_var_pred_tf, KL_pred_tf, obs, reward, done)
+                #print('Q_var_pred_tf', Q_var_pred_tf)
+                KL_pred_tf = self.calc_sum_future_KL(past_obs, past_obs, done, tf=True, actions_set=actions_set) 
+                KL_pred_tf -= torch.FloatTensor([self.KL(past_obs, done=done)])
+                #loss_Q_var = self.Q_ref_loss_tf(Q_var_pred_tf, obs, reward, done) #!!
+                #loss_Q_var = self.Q_var_loss_tf(Q_var_pred_tf, KL_pred_tf, obs, reward, done)
+                sum_future_rewards = self.calc_sum_future_rewards(reward, obs, done, actions_set=actions_set)
+                sum_future_rewards_tf = torch.FloatTensor([sum_future_rewards])
+                #print('sum_future_rewards_tf', sum_future_rewards_tf)
+                loss_Q_var = self.agent.PREC * 0.5 * torch.pow((sum_future_rewards_tf - Q_var_pred_tf), 2)
                 try:
-                    loss = KL_pred_tf #loss_Q_var #+ 
+                    #loss = loss_Q_var
+                    #print('KL_pred_tf', KL_pred_tf)
+                    #print('loss_Q_var', loss_Q_var)
+                    loss = KL_pred_tf + loss_Q_var #loss_Q_var #+ 
                     loss.backward()
                     self.agent.Q_var_optimizer.step()
                 except:
@@ -313,7 +361,11 @@ class Trainer():
 
             past_time = self.agent.get_time()
             past_obs = self.agent.get_observation()
-            past_obs_or_time, past_action, obs_or_time, reward, done = self.agent.step()
+            if self.agent.continuousAction:
+                actions_set = self.set_actions_set()
+            else:
+                actions_set = None
+            past_obs_or_time, past_action, obs_or_time, reward, done = self.agent.step(actions_set = actions_set)
             current_time = self.agent.get_time()
             obs = self.agent.get_observation()
 
@@ -328,6 +380,8 @@ class Trainer():
                     self.agent.num_episode += 1
                 else:
                     self.mem_obs += [obs]
+                    if self.agent.continuousAction:
+                        self.mem_act += [past_action]
             if done:
                 if self.agent.isDiscrete:
                     self.nb_visits_final[obs] += 1
@@ -347,9 +401,10 @@ class Trainer():
             if self.monte_carlo:
                 self.monte_carlo_update(done)
             else:
-                self.online_update(past_obs, past_action, obs, reward, done, past_time, current_time)
+                self.online_update(past_obs, past_action, obs, reward, done, past_time, current_time, actions_set=actions_set)
 
             if done:
+                self.mem_total_reward += [self.total_reward]
                 if self.nb_trials % 100 == 0 and not self.agent.isTime:
                     V = np.zeros(self.agent.N_obs)
                     for obs in range(self.agent.N_obs):
