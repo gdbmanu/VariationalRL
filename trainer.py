@@ -8,6 +8,8 @@ class Trainer():
     def __init__(self, agent,
                  OBS_LEAK=1e-3,
                  EPSILON=1e-3,
+                 N_PART=10,
+                 HIST_HORIZON=10000,
                  ref_prob='unif',
                  final=False,
                  monte_carlo=False,
@@ -27,9 +29,13 @@ class Trainer():
             self.mem_obs_final = []
         if self.agent.continuousAction:
             self.mem_act = []
+            self.mu_act = np.zeros(self.agent.N_act)
+            self.Sigma_act = np.diag(np.ones(self.agent.N_act))
         self.mem_total_reward = []
         self.OBS_LEAK = OBS_LEAK
         self.EPSILON = EPSILON
+        self.N_PART=N_PART
+        self.HIST_HORIZON = HIST_HORIZON
         self.mem_V = {}
         self.ref_prob = ref_prob
         self.final = final
@@ -51,7 +57,7 @@ class Trainer():
         if self.agent.isDiscrete:
             return self.obs_score / np.sum(self.obs_score)
         else:
-            b_inf = min(10000, len(self.mem_obs))
+            b_inf = min(self.HIST_HORIZON, len(self.mem_obs))
             mu = np.mean(self.mem_obs[-b_inf:], axis = 0)
             Sigma = np.cov(np.array(self.mem_obs[-b_inf:]).T)
             try:
@@ -63,31 +69,38 @@ class Trainer():
                 except:
                     rv = multivariate_normal(mu, np.ones(len(mu)))
             return rv.pdf # !! TODO a verifier  
-
-    def set_actions_set(self):
-        if False:
-            b_inf = min(10000, len(self.mem_act))
-            if b_inf > 0:
-                mu = np.mean(self.mem_act[-b_inf:], axis = 0)
-                if b_inf >= 10000:
-                    Sigma = np.cov(np.array(self.mem_act[-b_inf:]).T)
-                else:
-                    Sigma = np.diag(np.ones(len(mu)))
+        
+    def calc_actions_prob(self):
+        b_inf = min(self.HIST_HORIZON, len(self.mem_act))
+        if b_inf > 0:
+            mu = np.mean(self.mem_act[-b_inf:], axis = 0)
+            if b_inf >= self.HIST_HORIZON:
+                Sigma = np.cov(np.array(self.mem_act[-b_inf:]).T)
             else:
-                mu = np.zeros(self.agent.N_act)
                 Sigma = np.diag(np.ones(len(mu)))
         else:
             mu = np.zeros(self.agent.N_act)
-            Sigma =  np.diag(np.ones(self.agent.N_act)) ## * 0.3**2 ## !!
+            Sigma = np.diag(np.ones(len(mu)))
+        return mu, Sigma
+
+    def set_actions_set(self):
+        #if False:
+        #    
+        #else:
+        #    mu = np.zeros(self.agent.N_act)
+        #    Sigma =  np.diag(np.ones(self.agent.N_act)) ## * 0.3**2 ## !!
         actions_set = []
-        for indice_act in range(10):
-            if len(mu) == 1:
-                act = mu + np.random.normal() * np.sqrt(Sigma) #np.random.normal(mu, Sigma)
+        for indice_act in range(0):
+            if len(self.mu_act) == 1:
+                act = self.mu_act + np.random.normal() * np.sqrt(self.Sigma_act) #np.random.normal(mu, Sigma)
                 act = np.array(act[0])
             else:
-                act = np.random.multivariate_normal(mu, Sigma)
+                act = np.random.multivariate_normal(self.mu_act, self.Sigma_act)
             act = np.clip(act, self.agent.act_low, self.agent.act_high)
-            actions_set += [act]
+            actions_set.append(act)
+        for indice_act in range(self.N_PART):
+            act = self.agent.env.action_space.sample()
+            actions_set.append(act)
         return actions_set
         
         
@@ -121,7 +134,7 @@ class Trainer():
                     p[np.where(self.nb_visits > 0)] = 1 / np.sum(self.nb_visits > 0)
                 return p
             else:
-                b_inf = min(10000, len(self.mem_obs))
+                b_inf = min(self.HIST_HORIZON, len(self.mem_obs))
                 high = np.max(self.mem_obs[-b_inf:], axis = 0)
                 low = np.min(self.mem_obs[-b_inf:], axis = 0)
                 if np.prod(high - low) > 0:
@@ -294,7 +307,21 @@ class Trainer():
                 KL_pred_tf = self.agent.KL(past_obs, past_action, tf=True)
                 #print(KL_pred_tf.detach().numpy(), self.KL(obs, done=done))
                 loss_KL = self.KL_loss_tf(KL_pred_tf, obs, done, actions_set=future_actions_set)
+                #loss_KL.backward()
+                b_inf = min(self.HIST_HORIZON, len(self.mem_obs))
+                if b_inf == self.HIST_HORIZON:
+                    for i_backward in range(9):
+                        num_obs = np.random.randint(b_inf-1)
+                        obs_back = self.mem_obs[-num_obs-1]
+                        act_back = self.mem_act[-num_obs-1]
+                        KL_back_tf = self.agent.KL(obs_back, act_back, tf=True)
+                        loss_KL = torch.cat((loss_KL, self.KL_loss_tf(KL_back_tf, 
+                                                       self.mem_obs[-num_obs], 
+                                                       False, 
+                                                       actions_set=self.set_actions_set())))
+                    loss_KL = torch.sum(loss_KL.view(10))
                 loss_KL.backward()
+                
                 self.agent.KL_optimizer.step()
                 if self.agent.get_time() == 1:
                     toc = time.clock()
@@ -419,6 +446,7 @@ class Trainer():
             if past_time == 0:
                 self.state_probs = self.calc_state_probs()
                 self.ref_probs = self.calc_ref_probs(obs)
+                self.mu_act, self.Sigma_act = self.calc_actions_prob()
 
             mem_reward = reward
             if not self.agent.do_reward:
@@ -454,6 +482,8 @@ class Q_learning_trainer(Trainer):
     def __init__(self, agent,
                  EPSILON=1e-3,
                  OBS_LEAK=1e-3,
+                 N_PART=10,
+                 HIST_HORIZON=10000,
                  ref_prob='unif',
                  final=False,
                  monte_carlo=False,
@@ -461,6 +491,8 @@ class Q_learning_trainer(Trainer):
         super().__init__(agent,
                          EPSILON=EPSILON,
                          OBS_LEAK=OBS_LEAK,
+                         N_PART=N_PART,
+                         HIST_HORIZON=HIST_HORIZON,
                          ref_prob=ref_prob,
                          final=final,
                          monte_carlo=monte_carlo,
@@ -473,6 +505,8 @@ class KL_Q_learning_trainer(Trainer):
     def __init__(self, agent,
                  EPSILON=1e-3,
                  OBS_LEAK=1e-3,
+                 N_PART=10,
+                 HIST_HORIZON=10000,
                  ref_prob='unif',
                  final=False,
                  monte_carlo=False,
@@ -480,6 +514,8 @@ class KL_Q_learning_trainer(Trainer):
         super().__init__(agent,
                          EPSILON=EPSILON,
                          OBS_LEAK=OBS_LEAK,
+                         N_PART=N_PART,
+                         HIST_HORIZON=HIST_HORIZON,
                          ref_prob=ref_prob,
                          final=final,
                          monte_carlo=monte_carlo,
@@ -492,6 +528,8 @@ class One_step_variational_trainer(Trainer):
     def __init__(self, agent,
                  EPSILON=1e-3,
                  OBS_LEAK=1e-3,
+                 N_PART=10,
+                 HIST_HORIZON=10000,
                  ref_prob='unif',
                  final=False,
                  monte_carlo=False,
@@ -501,6 +539,8 @@ class One_step_variational_trainer(Trainer):
         super().__init__(agent,
                          EPSILON=EPSILON,
                          OBS_LEAK=OBS_LEAK,
+                         N_PART=N_PART,
+                         HIST_HORIZON=HIST_HORIZON,
                          ref_prob=ref_prob,
                          final=final,
                          monte_carlo=monte_carlo,
@@ -521,6 +561,8 @@ class Final_variational_trainer(Trainer):
     def __init__(self, agent,
                  EPSILON=1e-3,
                  OBS_LEAK=1e-3,
+                 N_PART=10,
+                 HIST_HORIZON=10000,
                  ref_prob='unif',
                  final=False,
                  monte_carlo=False,
@@ -530,6 +572,8 @@ class Final_variational_trainer(Trainer):
         super().__init__(agent,
                          EPSILON=EPSILON,
                          OBS_LEAK=OBS_LEAK,
+                         N_PART=N_PART,
+                         HIST_HORIZON=HIST_HORIZON,
                          ref_prob=ref_prob,
                          final=final,
                          monte_carlo=monte_carlo,

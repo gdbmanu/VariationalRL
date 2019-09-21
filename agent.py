@@ -37,11 +37,11 @@ class Agent:
             self.KL_nn = nn.Sequential(
                 nn.Linear(N_INPUT, N_HIDDEN, bias=True),
                 nn.ReLU(),
-                #nn.Linear(N_HIDDEN, N_HIDDEN, bias=True),
-                #nn.ReLU(),
+                nn.Linear(N_HIDDEN, N_HIDDEN, bias=True),
+                nn.ReLU(),
                 nn.Linear(N_HIDDEN, 1, bias=True)
             )
-            self.KL_optimizer = torch.optim.Adam(self.KL_nn.parameters(), lr = self.ALPHA * 3) #!! 30 ?? TODO : à vérifier
+            self.KL_optimizer = torch.optim.Adam(self.KL_nn.parameters(), lr = self.ALPHA) #!! *30 ?? TODO : à vérifier
             self.Q_ref_nn = nn.Sequential(
                 nn.Linear(N_INPUT, N_HIDDEN, bias=True),
                 nn.ReLU(),
@@ -117,19 +117,22 @@ class Agent:
                 return self.KL_nn(obs_tf).data.numpy()[0]
 
     def Q_ref(self, obs_or_time, act, tf=False):
-        if self.isDiscrete:
-            return self.Q_ref_tab[obs_or_time, act]
+        if not self.do_reward:
+            return 0
         else:
-            norm_obs_or_time = self.tf_normalize(obs_or_time)
-            if self.continuousAction:
-                input = np.concatenate((norm_obs_or_time, act))
+            if self.isDiscrete:
+                return self.Q_ref_tab[obs_or_time, act]
             else:
-                input = np.concatenate((norm_obs_or_time, self.one_hot(act)))
-            obs_tf = torch.FloatTensor([input])
-            if tf:
-                return self.Q_ref_nn(obs_tf)
-            else:
-                return self.Q_ref_nn(obs_tf).data.numpy()[0]
+                norm_obs_or_time = self.tf_normalize(obs_or_time)
+                if self.continuousAction:
+                    input = np.concatenate((norm_obs_or_time, act))
+                else:
+                    input = np.concatenate((norm_obs_or_time, self.one_hot(act)))
+                obs_tf = torch.FloatTensor([input])
+                if tf:
+                    return self.Q_ref_nn(obs_tf)
+                else:
+                    return self.Q_ref_nn(obs_tf).data.numpy()[0]
 
     def Q_var(self, obs_or_time, act, tf=False):
         if self.isDiscrete:
