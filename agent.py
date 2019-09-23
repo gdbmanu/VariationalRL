@@ -57,7 +57,7 @@ class Agent:
                 #nn.ReLU(),
                 nn.Linear(N_HIDDEN, 1, bias=True)
             )
-            self.Q_var_optimizer = torch.optim.Adam(self.Q_var_nn.parameters(), lr=self.ALPHA)
+            self.Q_var_optimizer = torch.optim.Adam(self.Q_var_nn.parameters(), lr=self.ALPHA *30 )
         else:
             if self.isTime:
                 self.Q_ref_tab = np.zeros((self.env.total_steps, self.N_act))  # target Q

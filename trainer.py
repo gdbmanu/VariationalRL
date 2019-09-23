@@ -309,7 +309,7 @@ class Trainer():
                 loss_KL = self.KL_loss_tf(KL_pred_tf, obs, done, actions_set=future_actions_set)
                 #loss_KL.backward()
                 b_inf = min(self.HIST_HORIZON, len(self.mem_obs))
-                if b_inf == self.HIST_HORIZON:
+                if False and b_inf == self.HIST_HORIZON:
                     for i_backward in range(9):
                         num_obs = np.random.randint(b_inf-1)
                         obs_back = self.mem_obs[-num_obs-1]
