@@ -96,25 +96,42 @@ class Agent:
         out[act] = 1
         return out
 
-    def tf_normalize(self, obs):
+    def tf_normalize(self, obs, show=False):
         m = (self.high + self.low) / 2
         diff = self.high - self.low
+        if show:
+            print("obs", obs)
+            #print("m", m)
+            #print("diff", diff)
+            print("normalized", (obs - m) / diff)
         return (obs - m) / diff
+    
+    def tf_cat(self, obs, act):
+        obs = np.array(obs)
+        act = np.array(act)
+        if self.continuousAction:
+            if act.ndim > 1:
+                return np.concatenate((obs, act), 1)
+            else:
+                return np.concatenate((obs, act))
+        else:
+            if act.ndim > 1:
+                return np.concatenate((obs, self.one_hot(act)), 1)
+            else:
+                return np.concatenate((obs, act))
 
     def KL(self, obs, act, tf=False):
         if self.isDiscrete:
             return self.KL_tab[obs, act]
         else:
             norm_obs = self.tf_normalize(obs)
-            if self.continuousAction:
-                input = np.concatenate((norm_obs, act))
-            else:
-                input = np.concatenate((norm_obs, self.one_hot(act)))
-            obs_tf = torch.FloatTensor([input])
+            input = self.tf_cat(norm_obs, act)
+            input_tf = torch.FloatTensor(input)
             if tf:
-                return self.KL_nn(obs_tf)
+                return self.KL_nn(input_tf)
             else:
-                return self.KL_nn(obs_tf).data.numpy()[0]
+                with torch.no_grad():
+                    return self.KL_nn(input_tf).data.numpy().squeeze()  #[0]
 
     def Q_ref(self, obs_or_time, act, tf=False):
         if not self.do_reward:
@@ -123,31 +140,28 @@ class Agent:
             if self.isDiscrete:
                 return self.Q_ref_tab[obs_or_time, act]
             else:
-                norm_obs_or_time = self.tf_normalize(obs_or_time)
-                if self.continuousAction:
-                    input = np.concatenate((norm_obs_or_time, act))
-                else:
-                    input = np.concatenate((norm_obs_or_time, self.one_hot(act)))
-                obs_tf = torch.FloatTensor([input])
+                norm_obs_or_time = self.tf_normalize(obs_or_time, show=False)
+                input = self.tf_cat(norm_obs_or_time, act)
+                input_tf = torch.FloatTensor(input)
                 if tf:
-                    return self.Q_ref_nn(obs_tf)
+                    print('input_tf.shape', input_tf.shape)
+                    return self.Q_ref_nn(input_tf)
                 else:
-                    return self.Q_ref_nn(obs_tf).data.numpy()[0]
+                    with torch.no_grad():
+                        return self.Q_ref_nn(input_tf).data.numpy().squeeze() #[0]
 
     def Q_var(self, obs_or_time, act, tf=False):
         if self.isDiscrete:
             return self.Q_var_tab[obs_or_time, act]
         else:
             norm_obs_or_time = self.tf_normalize(obs_or_time)
-            if self.continuousAction:
-                input = np.concatenate((norm_obs_or_time, act))
-            else:
-                input = np.concatenate((norm_obs_or_time, self.one_hot(act)))
-            obs_tf = torch.FloatTensor([input])
+            input = self.tf_cat(norm_obs_or_time, act)
+            input_tf = torch.FloatTensor(input)
             if tf:
-                return self.Q_var_nn(obs_tf)
+                return self.Q_var_nn(input_tf)
             else:
-                return self.Q_var_nn(obs_tf).data.numpy()[0]
+                with torch.no_grad():
+                    return self.Q_var_nn(input_tf).data.numpy().squeeze() #[0]
 
     def set_Q_obs(self, obs, Q=None, tf=False, actions_set=None):
         if Q is None:
