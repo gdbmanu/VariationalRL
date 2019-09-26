@@ -430,16 +430,12 @@ class Trainer():
                         sum_future_rewards_list = [sum_future_rewards]
                         if not self.Q_learning:
                             sum_future_KL_list = [sum_future_KL]
-                            loss_KL_tf = self.calc_sum_future_KL(past_obs, past_obs, test_done, tf=True, actions_set=actions_set) 
-                            loss_KL_tf -= torch.FloatTensor([liste_KL[time]])
-                            loss_KL_tf_list = loss_KL_tf
+                            
                     else:
                         sum_future_rewards_list.append(sum_future_rewards)
                         if not self.Q_learning:
                             sum_future_KL_list.append(sum_future_KL)
-                            loss_KL_tf = self.calc_sum_future_KL(past_obs, past_obs, test_done, tf=True, actions_set=actions_set) 
-                            loss_KL_tf -= torch.FloatTensor([liste_KL[time]])
-                            loss_KL_tf_list = torch.cat((loss_KL_tf_list, loss_KL_tf))
+                            
                         #sum_future_rewards_tf = torch.cat((sum_future_rewards_tf, 
                         #                                   torch.FloatTensor([sum_future_rewards])))
                     #Q_var_pred_tf = self.agent.Q_var(past_obs, past_action, tf=True)
@@ -447,51 +443,84 @@ class Trainer():
                     #print((np.array(liste_reward[time:])).shape)
                     #print(sum_KL)
             #print(sum_future_rewards_list)        
-            if not self.agent.isDiscrete:      
-                if not self.Q_learning:
-                    KL_pred_tf = self.agent.KL(self.trajectory[:-1], 
-                                           self.action_history, 
-                                           tf=True)
-                    sum_future_KL_tf = torch.FloatTensor([sum_future_KL_list]).view((final_time, 1))
-                    loss_KL = torch.sum(0.5 * torch.pow((sum_future_KL_tf - KL_pred_tf), 2))
-                    self.agent.KL_optimizer.zero_grad()
-                    loss_KL.backward()
-                    self.agent.KL_optimizer.step()
-                
-                if self.agent.do_reward:
-                    Q_ref_pred_tf = self.agent.Q_ref(self.trajectory[:-1], 
-                                                 self.action_history, 
-                                                 tf=True)#.view((final_time, 1))
-                    print('Q_ref_pred_tf ', Q_ref_pred_tf[0])
-                    #print('Q_ref_pred_tf test', self.agent.Q_ref(self.trajectory[0], 
-                    #                                 self.action_history[0], 
-                    #                                 tf=True).shape )                                
-                    sum_future_rewards_tf = torch.FloatTensor([sum_future_rewards_list]).view((final_time, 1))
-                    print('sum_future_rewards_tf ', sum_future_rewards_tf[0])
-                    loss_Q_ref = torch.sum(0.5 * torch.pow((sum_future_rewards_tf - Q_ref_pred_tf), 2))
-                    #loss_Q_ref = torch.nn.MSELoss()(Q_ref_pred_tf, sum_future_rewards_tf) 
-                    #loss_Q_ref= 0.5 * torch.pow((sum_future_rewards_tf - Q_ref_pred_tf), 2)
-                    print('loss_Q_ref', loss_Q_ref)
-                    self.agent.Q_ref_optimizer.zero_grad()
-                    loss_Q_ref.backward()
-                    #print (Q_ref_pred_tf.grad)
-                    #print (loss_Q_ref.grad)
-                    self.agent.Q_ref_optimizer.step()
-                else:
-                    sum_future_rewards_tf = torch.zeros((final_time, 1))
-                            
-                if self.Q_learning:
-                    self.agent.Q_var = self.agent.Q_ref
-                else:
-                    Q_var_pred_tf = self.agent.Q_var(self.trajectory[:-1], 
-                                                 self.action_history, 
-                                                 tf=True)
+            if not self.agent.isDiscrete:    
+                BATCH_SIZE = 20 # final_time 
+                for initial_batch_time in range(0, final_time, BATCH_SIZE):
+                    #print('batch_time', initial_batch_time)
+                    final_batch_time = min(initial_batch_time + BATCH_SIZE, final_time)
+                    current_batch_size = final_batch_time - initial_batch_time 
+                    if not self.Q_learning:
+                        KL_pred_tf = self.agent.KL(self.trajectory[initial_batch_time:final_batch_time], 
+                                               self.action_history[initial_batch_time:final_batch_time], 
+                                               tf=True)
+                        sum_future_KL_slice = sum_future_KL_list[initial_batch_time:final_batch_time]
+                        sum_future_KL_tf = torch.FloatTensor([sum_future_KL_slice]).view((current_batch_size, 1))
+                        loss_KL_list = 0.5 * torch.pow((sum_future_KL_tf - KL_pred_tf), 2)
+                        loss_KL = torch.sum(loss_KL_list)
+                        self.agent.KL_optimizer.zero_grad()
+                        loss_KL.backward()
+                        self.agent.KL_optimizer.step()
+
+                    if self.agent.do_reward:
+                        Q_ref_pred_tf = self.agent.Q_ref(self.trajectory[initial_batch_time:final_batch_time], 
+                                                     self.action_history[initial_batch_time:final_batch_time], 
+                                                     tf=True)#.view((final_time, 1))
                         
-                    loss_Q_var = torch.sum(self.agent.PREC * 0.5 * torch.pow((Q_ref_pred_tf.detach() - Q_var_pred_tf), 2) \
-                                          + loss_KL_tf_list.view((final_time, 1)))    
-                    self.agent.Q_var_optimizer.zero_grad()
-                    loss_Q_var.backward()
-                    self.agent.Q_var_optimizer.step()
+                        #print('Q_ref_pred_tf test', self.agent.Q_ref(self.trajectory[0], 
+                        #                                 self.action_history[0], 
+                        #                                 tf=True).shape )    
+                        sum_future_rewards_slice = sum_future_rewards_list[initial_batch_time:final_batch_time]
+                        sum_future_rewards_tf = torch.FloatTensor([sum_future_rewards_slice]).view((current_batch_size, 1))
+                        
+                        loss_Q_ref = torch.sum(0.5 * torch.pow((sum_future_rewards_tf - Q_ref_pred_tf), 2))
+                        #loss_Q_ref = torch.nn.MSELoss()(Q_ref_pred_tf, sum_future_rewards_tf) 
+                        #loss_Q_ref= 0.5 * torch.pow((sum_future_rewards_tf - Q_ref_pred_tf), 2)
+                        if initial_batch_time == 0:
+                            print('Q_ref_pred_tf ', Q_ref_pred_tf[0])
+                            print('sum_future_rewards_tf ', sum_future_rewards_tf[0])
+                            print('loss_Q_ref', loss_Q_ref)
+                        self.agent.Q_ref_optimizer.zero_grad()
+                        loss_Q_ref.backward()
+                        #print (Q_ref_pred_tf.grad)
+                        #print (loss_Q_ref.grad)
+                        self.agent.Q_ref_optimizer.step()
+                    else:
+                        sum_future_rewards_tf = torch.zeros((current_batch_size, 1))
+
+                    if self.Q_learning:
+                        self.agent.Q_var = self.agent.Q_ref
+                    else:
+                        for time in range(initial_batch_time, final_batch_time):
+                            past_obs = self.trajectory[time]
+                            actions_set = self.actions_set_history[time]
+                            test_done = final_time == time + 1
+                            if time == initial_batch_time:
+                                loss_KL_tf = self.calc_sum_future_KL(past_obs, past_obs, 
+                                                                     test_done, tf=True, 
+                                                                     actions_set=actions_set) 
+                                loss_KL_tf -= torch.FloatTensor([liste_KL[time]])
+                                loss_KL_tf_list = loss_KL_tf
+                            else:
+                                loss_KL_tf = self.calc_sum_future_KL(past_obs, past_obs, 
+                                                                     test_done, tf=True, 
+                                                                     actions_set=actions_set) 
+                                loss_KL_tf -= torch.FloatTensor([liste_KL[time]])
+                                loss_KL_tf_list = torch.cat((loss_KL_tf_list, loss_KL_tf))
+                                
+                        Q_var_pred_tf = self.agent.Q_var(self.trajectory[initial_batch_time:final_batch_time], 
+                                                     self.action_history[initial_batch_time:final_batch_time], 
+                                                     tf=True)
+
+                        if self.agent.do_reward:
+                            sum_future_rewards_tf = Q_ref_pred_tf.detach()
+                        else:
+                            sum_future_rewards_tf = torch.zeros((current_batch_size, 1))
+                        
+                        loss_Q_var = torch.sum(self.agent.PREC * 0.5 * torch.pow((sum_future_rewards_tf - Q_var_pred_tf), 2) \
+                                              + loss_KL_tf_list.view((current_batch_size, 1)))    
+                        self.agent.Q_var_optimizer.zero_grad()
+                        loss_Q_var.backward()
+                        self.agent.Q_var_optimizer.step()
                 
 
 
