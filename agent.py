@@ -192,6 +192,25 @@ class Agent:
         return Q_obs
         
 
+    def logSoftmax(self, obs, act, Q=None, tf=False, actions_set=None):
+        Q_obs = self.set_Q_obs(obs, Q=Q, tf=tf, actions_set=actions_set)
+        if actions_set is None:
+            N_act = self.N_act
+            index_act = act
+        else:
+            N_act = len(actions_set)
+            #print('actions_set', actions_set)
+            index_act = np.where(actions_set == act)[0][0] #actions_set.index(act)
+        if tf:
+            logp = torch.nn.LogSoftmax(dim=0)(self.BETA * Q_obs)
+            return logp.view(N_act)[index_act]
+        else:
+            act_score = np.zeros(N_act)
+            m_Q = np.mean(Q_obs)
+            for a in range(N_act):
+                act_score[a] = np.exp(self.BETA * (Q_obs[a] - m_Q))
+            return self.BETA * (Q_obs[index_act] - m_Q) - np.log(np.sum(act_score))
+        
     def softmax(self, obs, Q=None, tf=False, actions_set=None):
         Q_obs = self.set_Q_obs(obs, Q=Q, tf=tf, actions_set=actions_set)
         if actions_set is None:
