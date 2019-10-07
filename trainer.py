@@ -171,7 +171,7 @@ class Trainer():
                     print('obs :', final_obs, ', KL loss : ', np.log(final_state_probs(final_obs)) - np.log(ref_probs))
                     return np.log(final_state_probs(final_obs)) - np.log(ref_probs)  # +1
             else:
-                return 0  # self.agent.KL_tab[past_obs, a]
+                return 0  # self.agent.Q_KL_tab[past_obs, a]
         else:
             state_probs = self.state_probs #self.calc_state_probs()
             ref_probs = self.ref_probs #calc_ref_probs(final_obs, EPSILON=self.EPSILON)
@@ -183,7 +183,8 @@ class Trainer():
                 except:
                     KL_out = -100
                 if done:
-                    print('obs :', final_obs, ', KL loss : ', KL_out)
+                    #print('obs :', final_obs, ', KL loss : ', KL_out)
+                                  
                 return KL_out  # +1
 
     def calc_sum_future_KL(self, obs, obs_or_time, done, tf=False, actions_set=None):
@@ -191,7 +192,7 @@ class Trainer():
         if tf:
             sum_future_KL = torch.FloatTensor([sum_future_KL])      
         if not done:
-            next_values = self.agent.set_Q_obs(obs, Q=self.agent.KL, tf=tf, actions_set=actions_set)
+            next_values = self.agent.set_Q_obs(obs, Q=self.agent.Q_KL, tf=tf, actions_set=actions_set)
             next_sum = self.agent.softmax_expectation(obs, next_values, tf=tf, actions_set=actions_set)
             sum_future_KL += self.agent.GAMMA * next_sum
         return sum_future_KL
@@ -210,10 +211,10 @@ class Trainer():
         # Only for baseline Environment
         #sum_future_KL = self.KL(obs, done=done)
         #if not done:
-        #    next_sum = self.agent.softmax_expectation(obs_or_time, self.agent.KL_tab[obs, :])
+        #    next_sum = self.agent.softmax_expectation(obs_or_time, self.agent.Q_KL_tab[obs, :])
         #    sum_future_KL += self.agent.GAMMA * next_sum
         sum_future_KL = self.calc_sum_future_KL(obs, obs_or_time, done)
-        return sum_future_KL - self.agent.KL(past_obs, past_action)
+        return sum_future_KL - self.agent.Q_KL(past_obs, past_action)
 
     def KL_loss_tf(self, KL_pred_tf, obs, done, actions_set=None): # Q TD_error
         sum_future_KL = self.calc_sum_future_KL(obs, obs, done, tf=False, actions_set=actions_set) # not tf=True!!!
@@ -268,7 +269,7 @@ class Trainer():
 
     def online_TD_err_var(self, past_obs, past_obs_or_time, past_action, obs, obs_or_time, reward, done=False):      
         sum_future_rewards = self.calc_sum_future_rewards(reward, obs_or_time, done)
-        sum_future_KL = self.agent.KL(past_obs, past_action)
+        sum_future_KL = self.agent.Q_KL(past_obs, past_action)
         return self.calc_TD_err_var(sum_future_rewards, sum_future_KL, past_obs, past_obs_or_time, past_action)
 
     def Q_var_loss_tf(self, Q_var_pred_tf, KL_pred_tf, obs, reward, done):
@@ -278,7 +279,7 @@ class Trainer():
         #    mult_Q = 1
         sum_future_rewards = self.calc_sum_future_rewards(reward, obs, done, tf=False)
         sum_future_rewards_tf = torch.FloatTensor([sum_future_rewards])
-        #sum_future_KL_tf = self.agent.KL(past_obs, past_action, tf=True)
+        #sum_future_KL_tf = self.agent.Q_KL(past_obs, past_action, tf=True)
         #sum_future_KL_tf = self.calc_sum_future_KL(past_obs, past_obs, done, tf=True) 
         #sum_future_KL_tf -= torch.FloatTensor([self.KL(past_obs, done=done)])
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -302,7 +303,7 @@ class Trainer():
             obs_or_time = obs
         if self.agent.isDiscrete:
             if not self.Q_learning:
-                self.agent.KL_tab[past_obs, past_action] += self.agent.ALPHA * 30 * self.online_KL_err(past_obs,
+                self.agent.Q_KL_tab[past_obs, past_action] += self.agent.ALPHA * 30 * self.online_KL_err(past_obs,
                                                                                               past_action,
                                                                                               obs,
                                                                                               obs_or_time,
@@ -327,7 +328,7 @@ class Trainer():
             if not self.Q_learning:
                 if self.agent.get_time() == 1:
                     tic = time.clock()
-                KL_pred_tf = self.agent.KL(past_obs, past_action, tf=True)
+                KL_pred_tf = self.agent.Q_KL(past_obs, past_action, tf=True)
                 #print(KL_pred_tf.detach().numpy(), self.KL(obs, done=done))
                 loss_KL = self.KL_loss_tf(KL_pred_tf, obs, done, actions_set=future_actions_set)
                 #loss_KL.backward()
@@ -337,7 +338,7 @@ class Trainer():
                         num_obs = np.random.randint(b_inf-1)
                         obs_back = self.mem_obs[-num_obs-1]
                         act_back = self.mem_act[-num_obs-1]
-                        KL_back_tf = self.agent.KL(obs_back, act_back, tf=True)
+                        KL_back_tf = self.agent.Q_KL(obs_back, act_back, tf=True)
                         loss_KL = torch.cat((loss_KL, self.KL_loss_tf(KL_back_tf, 
                                                        self.mem_obs[-num_obs], 
                                                        False, 
@@ -345,7 +346,7 @@ class Trainer():
                     loss_KL = torch.sum(loss_KL.view(10))
                 loss_KL.backward()
                 
-                self.agent.KL_optimizer.step()
+                self.agent.Q_KL_optimizer.step()
                 if self.agent.get_time() == 1:
                     toc = time.clock()
                     print('KL step', toc - tic)
@@ -394,7 +395,7 @@ class Trainer():
                     toc = time.clock()
                     print('Q_var step', toc - tic)
                 
-            self.agent.KL_optimizer.zero_grad()
+            self.agent.Q_KL_optimizer.zero_grad()
             self.agent.Q_ref_optimizer.zero_grad()
             self.agent.Q_var_optimizer.zero_grad()
 
@@ -478,16 +479,16 @@ class Trainer():
                             final_batch_time = min(initial_batch_time + BATCH_SIZE, final_time)
                             current_batch_size = final_batch_time - initial_batch_time 
                             if not self.Q_learning: # !!!!TODO : tests!!!! 
-                                KL_pred_tf = self.agent.KL(self.trajectory[initial_batch_time:final_batch_time], 
+                                KL_pred_tf = self.agent.Q_KL(self.trajectory[initial_batch_time:final_batch_time], 
                                                        self.action_history[initial_batch_time:final_batch_time], 
                                                        tf=True)
                                 sum_future_KL_slice = sum_future_KL_list[initial_batch_time:final_batch_time]
                                 sum_future_KL_tf = torch.FloatTensor([sum_future_KL_slice]).view((current_batch_size, 1))
                                 loss_KL_list = 0.5 * torch.pow((sum_future_KL_tf - KL_pred_tf), 2)
                                 loss_KL = torch.sum(loss_KL_list)
-                                self.agent.KL_optimizer.zero_grad()
+                                self.agent.Q_KL_optimizer.zero_grad()
                                 loss_KL.backward()
-                                self.agent.KL_optimizer.step()
+                                self.agent.Q_KL_optimizer.step()
 
                             if self.agent.do_reward:
                                 Q_ref_pred_tf = self.agent.Q_ref(self.trajectory[initial_batch_time:final_batch_time], 
@@ -628,7 +629,11 @@ class Trainer():
                 self.agent.env.render()
 
             if done:
-                self.mem_total_reward += [self.total_reward]
+                KL_final = self.KL(obs, done=done)
+                self.mem_KL_final.append(KL_final)
+                self.mem_t_final.append(current_time)
+                self.mem_total_reward.append(self.total_reward)
+                print('final KL loss:', KL_final, 'final time:', current time, 'total reward:', self.total_reward)     
                 if self.nb_trials % 100 == 0 and self.agent.isDiscrete and not self.agent.isTime:
                     V = np.zeros(self.agent.N_obs)
                     for obs in range(self.agent.N_obs):
@@ -750,9 +755,9 @@ class Final_variational_trainer(Trainer):
         else:
             pi = self.agent.softmax(past_time)[a]
         if self.ignore_pi:
-            return self.agent.BETA * self.agent.KL[past_obs, a]
+            return self.agent.BETA * self.agent.Q_KL[past_obs, a]
         else:
-            return (1 - pi) * self.agent.BETA * self.agent.KL[past_obs, a]  # self.KL(past_obs, a, final_obs, done)
+            return (1 - pi) * self.agent.BETA * self.agent.Q_KL[past_obs, a]  # self.KL(past_obs, a, final_obs, done)
 
     ## DEPRECATED?
     def BETA_err(self, past_obs, past_action, past_time=None):
@@ -766,4 +771,4 @@ class Final_variational_trainer(Trainer):
             past_obs_or_time = past_obs
         return - mult_Q * (self.agent.Q_var(past_obs_or_time, past_action)
                            - self.agent.softmax_expectation(past_obs_or_time)) \
-               * self.agent.KL(past_obs, past_action)
+               * self.agent.Q_KL(past_obs, past_action)

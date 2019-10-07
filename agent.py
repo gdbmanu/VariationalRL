@@ -34,14 +34,14 @@ class Agent:
                 self.act_high = self.env.action_space.high
                 self.act_low = self.env.action_space.low
             
-            self.KL_nn = nn.Sequential(
+            self.Q_KL_nn = nn.Sequential(
                 nn.Linear(N_INPUT, N_HIDDEN, bias=True),
                 nn.ReLU(),
                 nn.Linear(N_HIDDEN, N_HIDDEN, bias=True),
                 nn.ReLU(),
                 nn.Linear(N_HIDDEN, 1, bias=True)
             )
-            self.KL_optimizer = torch.optim.Adam(self.KL_nn.parameters(), lr = self.ALPHA) #!! *30 ?? TODO : à vérifier
+            self.Q_KL_optimizer = torch.optim.Adam(self.Q_KL_nn.parameters(), lr = self.ALPHA) #!! *30 ?? TODO : à vérifier
             self.Q_ref_nn = nn.Sequential(
                 nn.Linear(N_INPUT, N_HIDDEN, bias=True),
                 nn.ReLU(),
@@ -65,7 +65,7 @@ class Agent:
             else:
                 self.Q_ref_tab = np.zeros((self.N_obs, self.N_act))  # target Q
                 self.Q_var_tab = np.zeros((self.N_obs, self.N_act))  # variational Q
-            self.KL_tab = np.zeros((self.N_obs, self.N_act))
+            self.Q_KL_tab = np.zeros((self.N_obs, self.N_act))
 
     @classmethod
     def timeAgent(cls, env, ALPHA=0.1, GAMMA=0.9, BETA = 1, PREC=1, do_reward=False):
@@ -120,18 +120,18 @@ class Agent:
             else:
                 return np.concatenate((obs, act))
 
-    def KL(self, obs, act, tf=False):
+    def Q_KL(self, obs, act, tf=False):
         if self.isDiscrete:
-            return self.KL_tab[obs, act]
+            return self.Q_KL_tab[obs, act]
         else:
             norm_obs = self.tf_normalize(obs)
             input = self.tf_cat(norm_obs, act)
             input_tf = torch.FloatTensor(input)
             if tf:
-                return self.KL_nn(input_tf)
+                return self.Q_KL_nn(input_tf)
             else:
                 with torch.no_grad():
-                    return self.KL_nn(input_tf).data.numpy().squeeze()  #[0]
+                    return self.Q_KL_nn(input_tf).data.numpy().squeeze()  #[0]
 
     def Q_ref(self, obs_or_time, act, tf=False):
         if not self.do_reward:
@@ -207,8 +207,10 @@ class Agent:
         else:
             act_score = np.zeros(N_act)
             m_Q = np.mean(Q_obs)
+            max_Q_score = np.max(self.BETA *(Q_obs - m_Q))
             for a in range(N_act):
-                act_score[a] = np.exp(self.BETA * (Q_obs[a] - m_Q))
+                Q_score = max(max_Q_score - 30, self.BETA *(Q_obs[a] - m_Q))
+                act_score[a] = np.exp(Q_score)
             return self.BETA * (Q_obs[index_act] - m_Q) - np.log(np.sum(act_score))
         
     def softmax(self, obs, Q=None, tf=False, actions_set=None):
@@ -223,8 +225,10 @@ class Agent:
         else:
             act_score = np.zeros(N_act)
             m_Q = np.mean(Q_obs)
+            max_Q_score = np.max(self.BETA *(Q_obs - m_Q))
             for a in range(N_act):
-                act_score[a] = np.exp(self.BETA * (Q_obs[a] - m_Q))
+                Q_score = max(max_Q_score - 30, self.BETA *(Q_obs[a] - m_Q))
+                act_score[a] = np.exp(Q_score)
             return act_score / np.sum(act_score)
 
     def softmax_choice(self, obs, actions_set=None):
