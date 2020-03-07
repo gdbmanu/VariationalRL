@@ -117,7 +117,7 @@ class Trainer():
                     else:
                         p[np.where(self.nb_visits > 0)] = 1 / np.sum(self.nb_visits > 0)
                 else:
-                    p = np.zeros(self.agent.N_obs) / self.agent.N_obs
+                    p = np.ones(self.agent.N_obs) / self.agent.N_obs
                 return p
             else:
                 b_inf = min(self.HIST_HORIZON, len(self.mem_obs))
