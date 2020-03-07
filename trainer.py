@@ -1,5 +1,7 @@
 import numpy as np
 from scipy.stats import multivariate_normal
+from environment import Environment
+
 import torch
 import time
 
@@ -15,7 +17,8 @@ class Trainer():
                  monte_carlo=False,
                  Q_learning=False,
                  KL_reward=False,
-                 ignore_pi = False):
+                 ignore_pi=False,
+                 augmentation=True):
         self.agent = agent
         self.nb_trials = 0
         self.init_trial(update=False)
@@ -45,6 +48,7 @@ class Trainer():
         self.Q_learning = Q_learning
         self.KL_reward = KL_reward
         self.ignore_pi = ignore_pi
+        self.augmentation = augmentation
 
     def init_trial(self, update=True):
         if update:
@@ -72,7 +76,7 @@ class Trainer():
             except:
             #else:
                 try:
-                    var = np.var(trainer.mem_obs, axis=0)
+                    var = np.var(self.mem_obs, axis=0)
                     rv = multivariate_normal(mu, var)
                 except:
                     rv = multivariate_normal(mu, np.ones(len(mu)))
@@ -93,7 +97,7 @@ class Trainer():
                 rv = multivariate_normal(mu, Sigma)
             except:
                 try:
-                    var = np.var(trainer.mem_obs_final, axis=0)
+                    var = np.var(self.mem_obs_final, axis=0)
                     rv = multivariate_normal(mu, var)
                 except:
                     rv = multivariate_normal(mu, np.ones(len(mu)))          
@@ -104,13 +108,16 @@ class Trainer():
         if self.ref_prob == 'unif':
             # EXPLORATION DRIVE
             if self.agent.isDiscrete:
-                p = np.zeros(self.agent.N_obs)
-                if self.final:
-                    ## !!!! A revoir TODO !!!!!!!!
-                    #p[np.where(self.nb_visits > 0)] = 1 / np.sum(self.nb_visits > 0) 
-                    p[np.where(self.nb_visits_final > 0)] = 1 / np.sum(self.nb_visits_final > 0)
+                if self.augmentation:
+                    p = np.zeros(self.agent.N_obs)
+                    if self.final:
+                        ## !!!! A revoir TODO !!!!!!!!
+                        #p[np.where(self.nb_visits > 0)] = 1 / np.sum(self.nb_visits > 0)
+                        p[np.where(self.nb_visits_final > 0)] = 1 / np.sum(self.nb_visits_final > 0)
+                    else:
+                        p[np.where(self.nb_visits > 0)] = 1 / np.sum(self.nb_visits > 0)
                 else:
-                    p[np.where(self.nb_visits > 0)] = 1 / np.sum(self.nb_visits > 0)
+                    p = np.zeros(self.agent.N_obs) / self.agent.N_obs
                 return p
             else:
                 b_inf = min(self.HIST_HORIZON, len(self.mem_obs))
@@ -662,7 +669,8 @@ class Q_learning_trainer(Trainer):
                  ref_prob='unif',
                  final=False,
                  monte_carlo=False,
-                 KL_reward=False):
+                 KL_reward=False,
+                 augmentation=True):
         super().__init__(agent,
                          EPSILON=EPSILON,
                          OBS_LEAK=OBS_LEAK,
@@ -672,7 +680,8 @@ class Q_learning_trainer(Trainer):
                          final=final,
                          monte_carlo=monte_carlo,
                          Q_learning=True,
-                         KL_reward=KL_reward)
+                         KL_reward=KL_reward,
+                         augmentation=augmentation)
 
 
 class KL_Q_learning_trainer(Trainer):
@@ -685,7 +694,8 @@ class KL_Q_learning_trainer(Trainer):
                  ref_prob='unif',
                  final=False,
                  monte_carlo=False,
-                 KL_reward=True):
+                 KL_reward=True,
+                 augmentation=True):
         super().__init__(agent,
                          EPSILON=EPSILON,
                          OBS_LEAK=OBS_LEAK,
@@ -695,7 +705,8 @@ class KL_Q_learning_trainer(Trainer):
                          final=final,
                          monte_carlo=monte_carlo,
                          Q_learning=True,
-                         KL_reward=KL_reward)
+                         KL_reward=KL_reward,
+                         augmentation=augmentation)
 
 
 class One_step_variational_trainer(Trainer):
@@ -710,7 +721,8 @@ class One_step_variational_trainer(Trainer):
                  monte_carlo=False,
                  Q_learning=False,
                  KL_reward=False,
-                 ignore_pi = False):
+                 ignore_pi = False,
+                 augmentation=True):
         super().__init__(agent,
                          EPSILON=EPSILON,
                          OBS_LEAK=OBS_LEAK,
@@ -721,7 +733,8 @@ class One_step_variational_trainer(Trainer):
                          monte_carlo=monte_carlo,
                          Q_learning=False,
                          KL_reward=KL_reward,
-                         ignore_pi=ignore_pi)
+                         ignore_pi=ignore_pi,
+                         augmentation=augmentation)
 
     # agent.Q_var update # DEPRECATED ??
     def KL_diff(self, past_obs, a, new_obs, done=False, past_time=None):
@@ -743,7 +756,8 @@ class Final_variational_trainer(Trainer):
                  monte_carlo=False,
                  Q_learning=False,
                  KL_reward=False,
-                 ignore_pi = False):
+                 ignore_pi = False,
+                 augmentation=True):
         super().__init__(agent,
                          EPSILON=EPSILON,
                          OBS_LEAK=OBS_LEAK,
@@ -754,7 +768,8 @@ class Final_variational_trainer(Trainer):
                          monte_carlo=monte_carlo,
                          Q_learning=Q_learning,
                          KL_reward=KL_reward,
-                         ignore_pi=ignore_pi)
+                         ignore_pi=ignore_pi,
+                         augmentation=augmentation)
 
     # agent.Q_var update
     def KL_diff(self, past_obs, a, final_obs, done=False, past_time=None):
