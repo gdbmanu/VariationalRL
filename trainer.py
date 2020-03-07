@@ -275,7 +275,7 @@ class Trainer():
         #pi = self.agent.softmax(past_obs_or_time, Q = self.agent.Q_ref)[past_action]
         pi = self.agent.softmax(past_obs_or_time, Q = self.agent.Q_var)[past_action]
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        mult_pi = 1 # 1 - pi # 
+        mult_pi = 1 - pi # 1 #
         return self.agent.BETA * (sum_future_rewards - self.agent.Q_var(past_obs_or_time, past_action) \
              - mult_pi *  mult_Q * sum_future_KL)
         
