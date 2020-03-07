@@ -32,6 +32,8 @@ class Trainer():
             self.mu_act = np.zeros(self.agent.N_act)
             self.Sigma_act = np.diag(np.ones(self.agent.N_act))
         self.mem_total_reward = []
+        self.mem_KL_final = []
+        self.mem_t_final = []
         self.OBS_LEAK = OBS_LEAK
         self.EPSILON = EPSILON
         self.N_PART=N_PART
@@ -82,7 +84,7 @@ class Trainer():
         if self.agent.isDiscrete:
             return self.obs_score_final / np.sum(self.obs_score_final)
         else:
-            b_inf = min(self.HIST_HORIZON, len(self.mem_obs_final))
+            b_inf = min(1000, len(self.mem_obs_final))
             mu = np.mean(self.mem_obs_final[-b_inf:], axis=0)
             eps = 1e-1
             #Sigma = np.cov(np.array(self.mem_obs_final).T)
@@ -168,13 +170,17 @@ class Trainer():
                 if self.agent.isDiscrete:
                     return np.log(final_state_probs[final_obs]) - np.log(ref_probs[final_obs])  # +1
                 else:
-                    print('obs :', final_obs, ', KL loss : ', np.log(final_state_probs(final_obs)) - np.log(ref_probs))
+                    #print('obs :', final_obs, ', KL loss : ', np.log(final_state_probs(final_obs)) - np.log(ref_probs))
                     return np.log(final_state_probs(final_obs)) - np.log(ref_probs)  # +1
             else:
                 return 0  # self.agent.Q_KL_tab[past_obs, a]
         else:
-            state_probs = self.state_probs #self.calc_state_probs()
-            ref_probs = self.ref_probs #calc_ref_probs(final_obs, EPSILON=self.EPSILON)
+            if self.agent.continuousAction:
+                state_probs = self.state_probs 
+                ref_probs = self.ref_probs 
+            else:
+                state_probs = self.calc_state_probs()
+                ref_probs = self.calc_ref_probs(final_obs, EPSILON=self.EPSILON)
             if self.agent.isDiscrete:
                 return np.log(state_probs[final_obs]) - np.log(ref_probs[final_obs])  # +1
             else:
@@ -182,9 +188,8 @@ class Trainer():
                     KL_out = max(np.log(state_probs(final_obs)) - np.log(ref_probs), -100)
                 except:
                     KL_out = -100
-                if done:
-                    #print('obs :', final_obs, ', KL loss : ', KL_out)
-                                  
+                #if done:
+                    #print('obs :', final_obs, ', KL loss : ', KL_out)                                  
                 return KL_out  # +1
 
     def calc_sum_future_KL(self, obs, obs_or_time, done, tf=False, actions_set=None):
@@ -263,9 +268,10 @@ class Trainer():
         #pi = self.agent.softmax(past_obs_or_time, Q = self.agent.Q_ref)[past_action]
         pi = self.agent.softmax(past_obs_or_time, Q = self.agent.Q_var)[past_action]
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        mult_pi = 1 - pi # 1 # 
+        mult_pi = 1 # 1 - pi # 
         return self.agent.BETA * (sum_future_rewards - self.agent.Q_var(past_obs_or_time, past_action) \
-               - mult_pi *  mult_Q * sum_future_KL)
+             - mult_pi *  mult_Q * sum_future_KL)
+        
 
     def online_TD_err_var(self, past_obs, past_obs_or_time, past_action, obs, obs_or_time, reward, done=False):      
         sum_future_rewards = self.calc_sum_future_rewards(reward, obs_or_time, done)
@@ -303,7 +309,8 @@ class Trainer():
             obs_or_time = obs
         if self.agent.isDiscrete:
             if not self.Q_learning:
-                self.agent.Q_KL_tab[past_obs, past_action] += self.agent.ALPHA * 30 * self.online_KL_err(past_obs,
+                MULT = 3 # 30 #
+                self.agent.Q_KL_tab[past_obs, past_action] += self.agent.ALPHA * MULT * self.online_KL_err(past_obs,
                                                                                               past_action,
                                                                                               obs,
                                                                                               obs_or_time,
@@ -442,14 +449,14 @@ class Trainer():
 
                         if self.agent.isDiscrete:
                             TD_err_ref = self.calc_TD_err_ref(sum_future_rewards, past_obs_or_time, past_action)
-                            self.agent.Q_ref[past_obs_or_time, past_action] += self.agent.ALPHA * TD_err_ref
+                            self.agent.Q_ref_tab[past_obs_or_time, past_action] += self.agent.ALPHA * TD_err_ref
 
                             TD_err_var = self.calc_TD_err_var(sum_future_rewards,
                                                               np.sum(liste_KL[time:]),
                                                               past_obs,
                                                               past_obs_or_time,
                                                               past_action)
-                            self.agent.Q_var[past_obs_or_time, past_action] += self.agent.ALPHA * TD_err_var
+                            self.agent.Q_var_tab[past_obs_or_time, past_action] += self.agent.ALPHA * TD_err_var
 
                         else:
                             #sum_KL = np.sum(np.array(liste_KL[time:]) * \
@@ -609,7 +616,8 @@ class Trainer():
             if past_time == 0:
                 self.state_probs = self.calc_state_probs()
                 self.ref_probs = self.calc_ref_probs(obs)
-                self.mu_act, self.Sigma_act = self.calc_actions_prob()
+                if self.agent.continuousAction:
+                    self.mu_act, self.Sigma_act = self.calc_actions_prob()
 
             mem_reward = reward
             if not self.agent.do_reward:
@@ -633,7 +641,7 @@ class Trainer():
                 self.mem_KL_final.append(KL_final)
                 self.mem_t_final.append(current_time)
                 self.mem_total_reward.append(self.total_reward)
-                print('final KL loss:', KL_final, 'final time:', current time, 'total reward:', self.total_reward)     
+                print('final KL loss:', KL_final) #, 'final time:', current_time, 'total reward:', self.total_reward)     
                 if self.nb_trials % 100 == 0 and self.agent.isDiscrete and not self.agent.isTime:
                     V = np.zeros(self.agent.N_obs)
                     for obs in range(self.agent.N_obs):

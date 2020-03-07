@@ -224,10 +224,10 @@ class Agent:
             return p.view(N_act)
         else:
             act_score = np.zeros(N_act)
-            m_Q = np.mean(Q_obs)
-            max_Q_score = np.max(self.BETA *(Q_obs - m_Q))
+            #m_Q = np.mean(Q_obs)
+            max_Q_score = np.max(self.BETA *(Q_obs))
             for a in range(N_act):
-                Q_score = max(max_Q_score - 30, self.BETA *(Q_obs[a] - m_Q))
+                Q_score = max(max_Q_score - 30, self.BETA * Q_obs[a]) - (max_Q_score - 15)
                 act_score[a] = np.exp(Q_score)
             return act_score / np.sum(act_score)
 
