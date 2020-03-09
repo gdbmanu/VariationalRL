@@ -62,10 +62,11 @@ class Agent:
             if self.isTime:
                 self.Q_ref_tab = np.zeros((self.env.total_steps, self.N_act))  # target Q
                 self.Q_var_tab = np.zeros((self.env.total_steps, self.N_act))  # variational Q
+                self.Q_KL_tab = np.zeros((self.env.total_steps, self.N_act))
             else:
                 self.Q_ref_tab = np.zeros((self.N_obs, self.N_act))  # target Q
                 self.Q_var_tab = np.zeros((self.N_obs, self.N_act))  # variational Q
-            self.Q_KL_tab = np.zeros((self.N_obs, self.N_act))
+                self.Q_KL_tab = np.zeros((self.N_obs, self.N_act))
 
     @classmethod
     def timeAgent(cls, env, ALPHA=0.1, GAMMA=0.9, BETA = 1, PREC=1, do_reward=False):

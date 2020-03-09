@@ -204,8 +204,8 @@ class Trainer():
         if tf:
             sum_future_KL = torch.FloatTensor([sum_future_KL])      
         if not done:
-            next_values = self.agent.set_Q_obs(obs, Q=self.agent.Q_KL, tf=tf, actions_set=actions_set)
-            next_sum = self.agent.softmax_expectation(obs, next_values, tf=tf, actions_set=actions_set)
+            next_values = self.agent.set_Q_obs(obs_or_time, Q=self.agent.Q_KL, tf=tf, actions_set=actions_set)
+            next_sum = self.agent.softmax_expectation(obs_or_time, next_values, tf=tf, actions_set=actions_set)
             sum_future_KL += self.agent.GAMMA * next_sum
         return sum_future_KL
     
@@ -218,7 +218,7 @@ class Trainer():
         logPolicy = self.agent.logSoftmax(past_obs, past_action, actions_set=past_actions_set, tf = True)
         return logPolicy * sum_future_KL
 
-    def online_KL_err(self, past_obs, past_action, obs, obs_or_time, done=False):
+    def online_KL_err(self, past_obs_or_time, past_action, obs, obs_or_time, done=False):
         # For policy update
         # Only for baseline Environment
         #sum_future_KL = self.KL(obs, done=done)
@@ -226,7 +226,7 @@ class Trainer():
         #    next_sum = self.agent.softmax_expectation(obs_or_time, self.agent.Q_KL_tab[obs, :])
         #    sum_future_KL += self.agent.GAMMA * next_sum
         sum_future_KL = self.calc_sum_future_KL(obs, obs_or_time, done)
-        return sum_future_KL - self.agent.Q_KL(past_obs, past_action)
+        return sum_future_KL - self.agent.Q_KL(past_obs_or_time, past_action)
 
     def KL_loss_tf(self, KL_pred_tf, obs, done, actions_set=None): # Q TD_error
         sum_future_KL = self.calc_sum_future_KL(obs, obs, done, tf=False, actions_set=actions_set) # not tf=True!!!
@@ -282,7 +282,7 @@ class Trainer():
 
     def online_TD_err_var(self, past_obs, past_obs_or_time, past_action, obs, obs_or_time, reward, done=False):      
         sum_future_rewards = self.calc_sum_future_rewards(reward, obs_or_time, done)
-        sum_future_KL = self.agent.Q_KL(past_obs, past_action)
+        sum_future_KL = self.agent.Q_KL(past_obs_or_time, past_action)
         return self.calc_TD_err_var(sum_future_rewards, sum_future_KL, past_obs, past_obs_or_time, past_action)
 
     def Q_var_loss_tf(self, Q_var_pred_tf, KL_pred_tf, obs, reward, done):
@@ -317,7 +317,7 @@ class Trainer():
         if self.agent.isDiscrete:
             if not self.Q_learning:
                 MULT = 3 # 30 #
-                self.agent.Q_KL_tab[past_obs, past_action] += self.agent.ALPHA * MULT * self.online_KL_err(past_obs,
+                self.agent.Q_KL_tab[past_obs_or_time, past_action] += self.agent.ALPHA * MULT * self.online_KL_err(past_obs_or_time,
                                                                                               past_action,
                                                                                               obs,
                                                                                               obs_or_time,
