@@ -232,8 +232,35 @@ class Agent:
                 act_score[a] = np.exp(Q_score)
             return act_score / np.sum(act_score)
 
+    def greedy_act_max(self, Q):
+        return np.argmax(Q)
+
+    def epsilon_greedy(self, obs, Q=None, tf=False, actions_set=None, EPS = 0.1):
+        Q_obs = self.set_Q_obs(obs, Q=Q, tf=tf, actions_set=actions_set)
+        act_max = self.greedy_act_max(Q_obs)
+        if actions_set is None:
+            N_act = self.N_act
+        else:
+            N_act = len(actions_set)
+        act_probs = np.zeros(N_act)
+        for act in range(N_act):
+            if act == act_max:
+                act_probs[act] = (1 - EPS) + EPS / N_act
+            else:
+                act_probs[act] = EPS / N_act
+        return act_probs
+
     def softmax_choice(self, obs, actions_set=None):
         act_probs = self.softmax(obs, actions_set=actions_set)
+        if actions_set is None:
+            action = np.random.choice(self.N_act, p=act_probs)
+        else:
+            indice_a = np.random.choice(len(actions_set), p=act_probs)
+            action = actions_set[indice_a]
+        return action
+
+    def epsilon_greedy_choice(self, obs, actions_set=None):
+        act_probs = self.epsilon_greedy(obs, actions_set=actions_set)
         if actions_set is None:
             action = np.random.choice(self.N_act, p=act_probs)
         else:
@@ -258,7 +285,10 @@ class Agent:
             curr_obs_or_time = self.get_time()
         else:
             curr_obs_or_time = self.get_observation()
-        action = self.softmax_choice(curr_obs_or_time, actions_set=actions_set)
+        if self.off_policy:
+            action = self.epsilon_greedy_choice(curr_obs_or_time, actions_set=actions_set)
+        else:
+            action = self.softmax_choice(curr_obs_or_time, actions_set=actions_set)
         new_obs, reward, done, _ = self.env.step(action)
         self.observation = new_obs
         self.time += 1
