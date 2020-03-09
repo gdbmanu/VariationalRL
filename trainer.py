@@ -670,7 +670,7 @@ class Q_learning_trainer(Trainer):
                  final=False,
                  monte_carlo=False,
                  KL_reward=False,
-                 augmentation=True):
+                 augmentation=False):
         super().__init__(agent,
                          EPSILON=EPSILON,
                          OBS_LEAK=OBS_LEAK,
