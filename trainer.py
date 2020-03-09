@@ -242,8 +242,8 @@ class Trainer():
         if tf:
             sum_future_rewards = torch.FloatTensor([sum_future_rewards])
         if not done:
-            next_values = self.agent.set_Q_obs(obs_or_time, 
-                                               Q=self.agent.Q_ref, 
+            next_values = self.agent.set_Q_obs(obs_or_time,
+                                               Q=self.agent.Q_ref,
                                                tf=tf, 
                                                actions_set=actions_set)
             sum_future_rewards += self.agent.GAMMA * self.agent.softmax_expectation(obs_or_time, 
@@ -254,8 +254,9 @@ class Trainer():
         return sum_future_rewards
     
     def calc_TD_err_ref(self, sum_future_rewards, past_obs_or_time, past_action):
-        return self.agent.BETA * (sum_future_rewards - self.agent.Q_ref(past_obs_or_time, past_action))
-        
+        #return self.agent.BETA * (sum_future_rewards - self.agent.Q_ref(past_obs_or_time, past_action))
+        return sum_future_rewards - self.agent.Q_ref(past_obs_or_time, past_action)
+
     def online_TD_err_ref(self, past_obs_or_time, past_action, obs_or_time, reward, done=False):
         sum_future_rewards = self.calc_sum_future_rewards(reward, obs_or_time, done)
         return self.calc_TD_err_ref(sum_future_rewards, past_obs_or_time, past_action)
@@ -272,13 +273,13 @@ class Trainer():
         else:
             mult_Q = 1
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        pi = self.agent.softmax(past_obs_or_time, Q = self.agent.Q_ref)[past_action]
+        #pi = self.agent.softmax(past_obs_or_time, Q = self.agent.Q_ref)[past_action]
         #pi = self.agent.softmax(past_obs_or_time, Q = self.agent.Q_var)[past_action]
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        mult_pi = 1 # 1 - pi #
-        return self.agent.BETA * (sum_future_rewards - self.agent.Q_var(past_obs_or_time, past_action) \
-             - mult_pi *  mult_Q * sum_future_KL)
-        
+        #mult_pi = 1 # 1 - pi #
+        #return self.agent.BETA * (sum_future_rewards - self.agent.Q_var(past_obs_or_time, past_action) \
+        #     - mult_pi *  mult_Q * sum_future_KL)
+        return sum_future_rewards - self.agent.Q_var(past_obs_or_time, past_action) - mult_Q * sum_future_KL
 
     def online_TD_err_var(self, past_obs, past_obs_or_time, past_action, obs, obs_or_time, reward, done=False):      
         sum_future_rewards = self.calc_sum_future_rewards(reward, obs_or_time, done)
