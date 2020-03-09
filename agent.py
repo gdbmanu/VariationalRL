@@ -6,7 +6,8 @@ import torch.nn as nn
 
 class Agent:
 
-    def __init__(self, env, ALPHA=0.1, GAMMA=0.9, BETA = 1, PREC=1, isTime=False, do_reward = True, Q_VAR_MULT=30):
+    def __init__(self, env, ALPHA=0.1, GAMMA=0.9, BETA = 1, PREC=1, isTime=False, do_reward = True,
+                 Q_VAR_MULT=30, offPolicy=False):
         #self.total_reward = 0.0
         self.env = env
         self.isDiscrete = type(env) is Environment or type(env) is gym.spaces.discrete.Discrete
@@ -19,6 +20,7 @@ class Agent:
         self.num_episode = 0
         self.do_reward = do_reward
         self.isTime = isTime
+        self.offPolicy = offPolicy
         if not self.isDiscrete:
             N_INPUT = self.N_obs + self.N_act
             N_HIDDEN = 50
@@ -285,7 +287,7 @@ class Agent:
             curr_obs_or_time = self.get_time()
         else:
             curr_obs_or_time = self.get_observation()
-        if self.off_policy:
+        if self.offPolicy:
             action = self.epsilon_greedy_choice(curr_obs_or_time, actions_set=actions_set)
         else:
             action = self.softmax_choice(curr_obs_or_time, actions_set=actions_set)
