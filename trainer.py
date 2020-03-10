@@ -457,6 +457,8 @@ class Trainer():
 
                         if self.agent.isDiscrete:
                             TD_err_ref = self.calc_TD_err_ref(sum_future_rewards, past_obs_or_time, past_action)
+                            #if time ==0:
+                            #    print(past_obs_or_time, past_action,self.agent.Q_ref_tab[past_obs_or_time, past_action], TD_err_ref)
                             self.agent.Q_ref_tab[past_obs_or_time, past_action] += self.agent.ALPHA * TD_err_ref
 
                             TD_err_var = self.calc_TD_err_var(sum_future_rewards,
