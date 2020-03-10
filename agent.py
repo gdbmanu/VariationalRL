@@ -6,7 +6,7 @@ import torch.nn as nn
 
 class Agent:
 
-    def __init__(self, env, ALPHA=0.1, GAMMA=0.9, BETA = 1, PREC=1, isTime=False, do_reward = True,
+    def __init__(self, env, ALPHA=0.01, GAMMA=0.9, BETA = 1, PREC=1, isTime=False, do_reward = True,
                  Q_VAR_MULT=30, offPolicy=False):
         #self.total_reward = 0.0
         self.env = env
