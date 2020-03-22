@@ -317,14 +317,15 @@ class Trainer():
             past_obs_or_time = past_obs
             obs_or_time = obs
         if self.agent.isDiscrete:
+            MULT = 3
             if not self.Q_learning:
-                MULT = 3 # 30 #
+                 # 30 #
                 self.agent.Q_KL_tab[past_obs_or_time, past_action] += self.agent.ALPHA * MULT * self.online_KL_err(past_obs_or_time,
                                                                                               past_action,
                                                                                               obs,
                                                                                               obs_or_time,
                                                                                               done=done)
-            self.agent.Q_ref_tab[past_obs_or_time, past_action] += self.agent.ALPHA * self.online_TD_err_ref(past_obs_or_time,
+            self.agent.Q_ref_tab[past_obs_or_time, past_action] += self.agent.ALPHA * MULT * self.online_TD_err_ref(past_obs_or_time,
                                                                                                   past_action,
                                                                                                   obs_or_time,
                                                                                                   reward,
