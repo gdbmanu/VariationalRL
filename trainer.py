@@ -288,10 +288,10 @@ class Trainer():
         return self.calc_TD_err_var(sum_future_rewards, sum_future_KL, past_obs, past_obs_or_time, past_action)
 
     def Q_var_loss_tf(self, Q_var_pred_tf, KL_pred_tf, obs, reward, done):
-        #if self.Q_learning:
-        #    mult_Q = 0
-        #else:
-        #    mult_Q = 1
+        if self.Q_learning:
+            mult_Q = 0
+        else:
+            mult_Q = 1
         sum_future_rewards = self.calc_sum_future_rewards(reward, obs, done, tf=False)
         sum_future_rewards_tf = torch.FloatTensor([sum_future_rewards])
         #sum_future_KL_tf = self.agent.Q_KL(past_obs, past_action, tf=True)
@@ -304,7 +304,9 @@ class Trainer():
         #mult_pi = 1 - pi
         #target_tf = torch.FloatTensor([sum_future_rewards - mult_pi * mult_Q * sum_future_KL])
         #return torch.sum(torch.pow(self.agent.BETA * (target_tf - Q_var_pred_tf), 2), 1)
-        return 0.5 * torch.pow((sum_future_rewards_tf - Q_var_pred_tf), 2) + KL_pred_tf
+        #return 0.5 * torch.pow((sum_future_rewards_tf - Q_var_pred_tf), 2) + KL_pred_tf
+        return 0.5 * torch.pow((sum_future_rewards_tf - Q_var_pred_tf \
+                                - 1 / self.agent.BETA * mult_Q * KL_pred_tf), 2)
         #return torch.sum(KL_pred_tf)
 
 
