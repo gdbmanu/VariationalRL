@@ -21,6 +21,7 @@ class Agent:
         self.do_reward = do_reward
         self.isTime = isTime
         self.offPolicy = offPolicy
+        self.Q_VAR_MULT = Q_VAR_MULT
         if not self.isDiscrete:
             N_INPUT = self.N_obs + self.N_act
             N_HIDDEN = 50
@@ -121,7 +122,8 @@ class Agent:
             if act.ndim > 1:
                 return np.concatenate((obs, self.one_hot(act)), 1)
             else:
-                return np.concatenate((obs, act))
+                #print(obs, self.one_hot(act))
+                return np.concatenate((obs, self.one_hot(act)), 0)
 
     def Q_KL(self, obs, act, tf=False):
         if self.isDiscrete:
