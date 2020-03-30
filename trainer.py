@@ -67,7 +67,7 @@ class Trainer():
             b_inf = min(self.HIST_HORIZON, len(self.mem_obs))
             mu = np.mean(self.mem_obs[-b_inf:], axis = 0)
             #print('mu', mu)
-            eps = 1e-1
+            eps = 1e-5
             Sigma = (1-eps) * np.cov(np.array(self.mem_obs[-b_inf:]).T) + eps * np.diag(np.ones(self.agent.N_obs))
             #print('Sigma', Sigma)
             try:
