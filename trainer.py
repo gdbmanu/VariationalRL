@@ -67,19 +67,17 @@ class Trainer():
             b_inf = min(self.HIST_HORIZON, len(self.mem_obs))
             mu = np.mean(self.mem_obs[-b_inf:], axis = 0)
             #print('mu', mu)
-            eps = 1e-1
-            Sigma = (1-eps) * np.cov(np.array(self.mem_obs[-b_inf:]).T) + eps * np.diag(np.ones(self.agent.N_obs))
+            #eps = 1e-5
+            #Sigma = (1-eps) * np.cov(np.array(self.mem_obs[-b_inf:]).T) + eps * np.diag(np.ones(self.agent.N_obs))
             #print('Sigma', Sigma)
+            #try:
+            #    rv = multivariate_normal(mu, Sigma)
+            #except:
             try:
-            #if False:
-                rv = multivariate_normal(mu, Sigma)
+                var = np.var(self.mem_obs, axis=0)
+                rv = multivariate_normal(mu, var)
             except:
-            #else:
-                try:
-                    var = np.var(self.mem_obs, axis=0)
-                    rv = multivariate_normal(mu, var)
-                except:
-                    rv = multivariate_normal(mu, np.ones(len(mu)))
+                rv = multivariate_normal(mu, np.ones(len(mu)))
             return rv.pdf # !! TODO a verifier  
         
         
@@ -90,17 +88,17 @@ class Trainer():
         else:
             b_inf = min(1000, len(self.mem_obs_final))
             mu = np.mean(self.mem_obs_final[-b_inf:], axis=0)
-            eps = 1e-1
+            eps = 1e-5
             #Sigma = np.cov(np.array(self.mem_obs_final).T)
-            Sigma = (1-eps) * np.cov(np.array(self.mem_obs_final[-b_inf:]).T) + eps * np.diag(np.ones(self.agent.N_obs))
+            #Sigma = (1-eps) * np.cov(np.array(self.mem_obs_final[-b_inf:]).T) + eps * np.diag(np.ones(self.agent.N_obs))
+            #try:
+            #    rv = multivariate_normal(mu, Sigma)
+            #except:
             try:
-                rv = multivariate_normal(mu, Sigma)
+                var = np.var(self.mem_obs_final, axis=0)
+                rv = multivariate_normal(mu, var)
             except:
-                try:
-                    var = np.var(self.mem_obs_final, axis=0)
-                    rv = multivariate_normal(mu, var)
-                except:
-                    rv = multivariate_normal(mu, np.ones(len(mu)))          
+                rv = multivariate_normal(mu, np.ones(len(mu)))          
             return rv.pdf # !! TODO a verifier 
 
         
@@ -120,13 +118,17 @@ class Trainer():
                     p = np.ones(self.agent.N_obs) / self.agent.N_obs
                 return p
             else:
-                b_inf = min(self.HIST_HORIZON, len(self.mem_obs))
-                high = np.max(self.mem_obs[-b_inf:], axis = 0)
-                low = np.min(self.mem_obs[-b_inf:], axis = 0)
-                if np.prod(high - low) > 0:
-                    return 1 / np.prod(high - low)
+                if self.augmentation:
+                    b_inf = min(self.HIST_HORIZON, len(self.mem_obs))
+                    high = np.max(self.mem_obs[-b_inf:], axis = 0)
+                    low = np.min(self.mem_obs[-b_inf:], axis = 0)
+                    if np.prod(high - low) > 0:                   
+                        return 1 / np.prod(high - low)
+                    else:
+                        return 1
                 else:
-                    return 1
+                    return 1 / np.prod(self.agent.env.observation_space.high - \
+                                       self.agent.env.observation_space.low)               
         else:
             # SET POINT
             if self.agent.isDiscrete:
@@ -177,12 +179,12 @@ class Trainer():
                 if self.agent.isDiscrete:
                     return np.log(final_state_probs[final_obs]) - np.log(ref_probs[final_obs])  # +1
                 else:
-                    #print('obs :', final_obs, ', KL loss : ', np.log(final_state_probs(final_obs)) - np.log(ref_probs))
+                    print('obs :', final_obs, ', KL loss : ', np.log(final_state_probs(final_obs)) - np.log(ref_probs))
                     return np.log(final_state_probs(final_obs)) - np.log(ref_probs)  # +1
             else:
                 return 0  # self.agent.Q_KL_tab[past_obs, a]
         else:
-            if self.agent.continuousAction:
+            if not self.agent.isDiscrete: #self.agent.continuousAction:
                 state_probs = self.state_probs 
                 ref_probs = self.ref_probs 
             else:
@@ -272,6 +274,17 @@ class Trainer():
             mult_Q = 0
         else:
             mult_Q = 1
+        if self.final:
+            if self.agent.GAMMA == 1:
+                LAMBDA = self.agent.env.total_steps / 2
+            else:
+                LAMBDA = 1 / self.agent.GAMMA
+        else:
+            LAMBDA = 1
+        if self.agent.do_reward:
+            DO_REWARD = 1
+        else:
+            DO_REWARD = 0
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         #pi = self.agent.softmax(past_obs_or_time, Q = self.agent.Q_ref)[past_action]
         #pi = self.agent.softmax(past_obs_or_time, Q = self.agent.Q_var)[past_action]
@@ -279,8 +292,8 @@ class Trainer():
         #mult_pi = 1 # 1 - pi #
         #return self.agent.BETA * (sum_future_rewards - self.agent.Q_var(past_obs_or_time, past_action) \
         #     - mult_pi *  mult_Q * sum_future_KL)
-        return sum_future_rewards - self.agent.Q_var(past_obs_or_time, past_action) \
-                                  - 1 / self.agent.BETA * mult_Q * sum_future_KL
+        return DO_REWARD * (sum_future_rewards - self.agent.Q_var(past_obs_or_time, past_action)) \
+                                  - LAMBDA / self.agent.BETA * mult_Q * sum_future_KL
 
     def online_TD_err_var(self, past_obs, past_obs_or_time, past_action, obs, obs_or_time, reward, done=False):      
         sum_future_rewards = self.calc_sum_future_rewards(reward, obs_or_time, done)
@@ -288,10 +301,18 @@ class Trainer():
         return self.calc_TD_err_var(sum_future_rewards, sum_future_KL, past_obs, past_obs_or_time, past_action)
 
     def Q_var_loss_tf(self, Q_var_pred_tf, KL_pred_tf, obs, reward, done):
-        if self.Q_learning:
-            mult_Q = 0
+        
+        if self.final:
+            if self.agent.GAMMA == 1:
+                LAMBDA = 10 #self.agent.env.total_steps / 2
+            else:
+                LAMBDA = 1 / self.agent.GAMMA
         else:
-            mult_Q = 1
+            LAMBDA = 1
+        '''if self.agent.do_reward:
+            DO_REWARD = 1
+        else:
+            DO_REWARD = 0'''
         sum_future_rewards = self.calc_sum_future_rewards(reward, obs, done, tf=False)
         sum_future_rewards_tf = torch.FloatTensor([sum_future_rewards])
         #sum_future_KL_tf = self.agent.Q_KL(past_obs, past_action, tf=True)
@@ -305,8 +326,11 @@ class Trainer():
         #target_tf = torch.FloatTensor([sum_future_rewards - mult_pi * mult_Q * sum_future_KL])
         #return torch.sum(torch.pow(self.agent.BETA * (target_tf - Q_var_pred_tf), 2), 1)
         #return 0.5 * torch.pow((sum_future_rewards_tf - Q_var_pred_tf), 2) + KL_pred_tf
-        return 0.5 * torch.pow((sum_future_rewards_tf - Q_var_pred_tf \
-                                - 1 / self.agent.BETA * mult_Q * KL_pred_tf), 2)
+        if self.Q_learning:
+            return 0.5 * self.agent.PREC * torch.pow(sum_future_rewards_tf - Q_var_pred_tf, 2)
+        else:
+            return 0.5 * self.agent.PREC * torch.pow(sum_future_rewards_tf - Q_var_pred_tf, 2) + LAMBDA / self.agent.BETA * KL_pred_tf
+            #return 0.5 * self.agent.PREC * torch.pow(sum_future_rewards_tf - Q_var_pred_tf - LAMBDA / self.agent.BETA * KL_pred_tf, 2)
         #return torch.sum(KL_pred_tf)
 
 
@@ -319,20 +343,19 @@ class Trainer():
             past_obs_or_time = past_obs
             obs_or_time = obs
         if self.agent.isDiscrete:
-            MULT = 3
             if not self.Q_learning:
                  # 30 #
-                self.agent.Q_KL_tab[past_obs_or_time, past_action] += self.agent.ALPHA * MULT * self.online_KL_err(past_obs_or_time,
+                self.agent.Q_KL_tab[past_obs_or_time, past_action] += self.agent.ALPHA * self.online_KL_err(past_obs_or_time,
                                                                                               past_action,
                                                                                               obs,
                                                                                               obs_or_time,
                                                                                               done=done)
-            self.agent.Q_ref_tab[past_obs_or_time, past_action] += self.agent.ALPHA * MULT * self.online_TD_err_ref(past_obs_or_time,
+            self.agent.Q_ref_tab[past_obs_or_time, past_action] += self.agent.ALPHA * self.online_TD_err_ref(past_obs_or_time,
                                                                                                   past_action,
                                                                                                   obs_or_time,
                                                                                                   reward,
                                                                                                   done=done)
-            self.agent.Q_var_tab[past_obs_or_time, past_action] += self.agent.ALPHA * self.online_TD_err_var(past_obs,
+            self.agent.Q_var_tab[past_obs_or_time, past_action] += self.agent.ALPHA * self.agent.Q_VAR_MULT * self.online_TD_err_var(past_obs,
                                                                                                   past_obs_or_time,
                                                                                                   past_action,
                                                                                                   obs,
@@ -351,7 +374,7 @@ class Trainer():
                 #print(KL_pred_tf.detach().numpy(), self.KL(obs, done=done))
                 loss_KL = self.KL_loss_tf(KL_pred_tf, obs, done, actions_set=future_actions_set)
                 #loss_KL.backward()
-                b_inf = min(self.HIST_HORIZON, len(self.mem_obs))
+                '''b_inf = min(self.HIST_HORIZON, len(self.mem_obs))
                 if False and b_inf == self.HIST_HORIZON:
                     for i_backward in range(9):
                         num_obs = np.random.randint(b_inf-1)
@@ -362,7 +385,7 @@ class Trainer():
                                                        self.mem_obs[-num_obs], 
                                                        False, 
                                                        actions_set=self.set_actions_set())))
-                    loss_KL = torch.sum(loss_KL.view(10))
+                    loss_KL = torch.sum(loss_KL.view(10))'''
                 loss_KL.backward()
                 
                 self.agent.Q_KL_optimizer.step()
@@ -391,23 +414,23 @@ class Trainer():
                     KL_pred_tf = self.calc_sum_future_KL(past_obs, past_obs, done, tf=True, actions_set=actions_set) 
                     KL_pred_tf -= torch.FloatTensor([self.KL(past_obs, done=done)])
                     #loss_Q_var = self.Q_ref_loss_tf(Q_var_pred_tf, obs, reward, done) #!!
-                    #loss_Q_var = self.Q_var_loss_tf(Q_var_pred_tf, KL_pred_tf, obs, reward, done)
-                    sum_future_rewards = self.calc_sum_future_rewards(reward, obs, done, actions_set=future_actions_set)
-                    sum_future_rewards_tf = torch.FloatTensor([sum_future_rewards])
+                    loss_Q_var = self.Q_var_loss_tf(Q_var_pred_tf, KL_pred_tf, obs, reward, done)
+                    #sum_future_rewards = self.calc_sum_future_rewards(reward, obs, done, actions_set=future_actions_set)
+                    #sum_future_rewards_tf = torch.FloatTensor([sum_future_rewards])
                     #print('sum_future_rewards_tf', sum_future_rewards_tf)
-                    loss_Q_var = self.agent.PREC * 0.5 * torch.pow((sum_future_rewards_tf - Q_var_pred_tf), 2)
-                    try:
+                    #loss_Q_var = self.agent.PREC * 0.5 * torch.pow((sum_future_rewards_tf - Q_var_pred_tf), 2)
+                    #try:
                         #loss = loss_Q_var
                         #print('KL_pred_tf', KL_pred_tf)
                         #print('loss_Q_var', loss_Q_var)     
-                        if self.agent.PREC > 0:
-                            loss = KL_pred_tf + loss_Q_var #loss_Q_var #+ 
-                        else:
-                            loss = KL_pred_tf
-                        loss.backward()
-                        self.agent.Q_var_optimizer.step()
-                    except:
-                        pass
+                    #    if self.agent.PREC > 0:
+                    #        loss = KL_pred_tf + loss_Q_var #loss_Q_var #+ 
+                    #    else:
+                    #        loss = KL_pred_tf
+                    loss_Q_var.backward()
+                    self.agent.Q_var_optimizer.step()
+                    #except:
+                    #    pass
                 else:
                     self.agent.Q_var = self.agent.Q_ref
                 if self.agent.get_time() == 1:
@@ -655,7 +678,7 @@ class Trainer():
                 self.mem_KL_final.append(KL_final)
                 self.mem_t_final.append(current_time)
                 self.mem_total_reward.append(self.total_reward)
-                print('final KL loss:', KL_final) #, 'final time:', current_time, 'total reward:', self.total_reward)     
+                print('obs:', obs, 'final KL loss:', KL_final) #, 'final time:', current_time, 'total reward:', self.total_reward)     
                 if self.nb_trials % 100 == 0 and self.agent.isDiscrete and not self.agent.isTime:
                     V = np.zeros(self.agent.N_obs)
                     for obs in range(self.agent.N_obs):
