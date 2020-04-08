@@ -573,19 +573,22 @@ class Trainer():
                                         future_actions_set = None
                                     else:
                                         future_actions_set = self.actions_set_history[time + 1]
-                                    loss_KL_tf = self.calc_KL_logPolicy_loss_tf(past_obs,
+                                    '''loss_KL_tf = self.calc_KL_logPolicy_loss_tf(past_obs,
                                                                                 past_action,
                                                                                 past_actions_set,
                                                                                 obs,
                                                                                 future_actions_set,
                                                                                 done = test_done,
                                                                                 sum_future_KL = sum_future_KL_list[time]
-                                                                               )
-                                    #loss_KL_tf = self.calc_sum_future_KL(past_obs, past_obs, 
-                                    #                                     test_done, tf=True, 
-                                    #                                     actions_set=actions_set) 
-                                    #if time > 0:
-                                    #    loss_KL_tf -= torch.FloatTensor([liste_KL[time-1]])
+                                                                               )'''
+                                    '''loss_KL_tf = self.calc_sum_future_KL(past_obs, past_obs, 
+                                                                         test_done, tf=True, 
+                                                                         actions_set=actions_set) 
+                                    if time > 0:
+                                        loss_KL_tf -= torch.FloatTensor([liste_KL[time-1]])'''
+                                    loss_KL_tf = self.calc_sum_future_KL(obs, obs, 
+                                                                         test_done, tf=True, 
+                                                                         actions_set=future_actions_set)
                                     if time == initial_batch_time:                                                                                                                        
                                         loss_KL_tf_list = loss_KL_tf
                                     else:
@@ -601,8 +604,16 @@ class Trainer():
                                     else:
                                         sum_future_rewards_tf = torch.zeros((current_batch_size, 1))
 
+                                if self.final:
+                                    if self.agent.GAMMA == 1:
+                                        LAMBDA = 100 #self.agent.env.total_steps / 2
+                                    else:
+                                        LAMBDA = 1 / self.agent.GAMMA
+                                else:
+                                    LAMBDA = 1
+                                    
                                 loss_Q_var = torch.sum(self.agent.PREC * 0.5 * torch.pow((sum_future_rewards_tf - Q_var_pred_tf), 2) \
-                                                      + loss_KL_tf_list.view((current_batch_size, 1)))    
+                                                      + LAMBDA / self.agent.BETA * loss_KL_tf_list.view((current_batch_size, 1)))    
                                 self.agent.Q_var_optimizer.zero_grad()
                                 loss_Q_var.backward()
                                 self.agent.Q_var_optimizer.step()
