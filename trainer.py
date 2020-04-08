@@ -601,11 +601,13 @@ class Trainer():
                                     else:
                                         sum_future_rewards_tf = torch.zeros((current_batch_size, 1))
 
+                                LAMBDA = 1
                                 loss_Q_var = torch.sum(self.agent.PREC * 0.5 * torch.pow((sum_future_rewards_tf - Q_var_pred_tf), 2) \
-                                                      + loss_KL_tf_list.view((current_batch_size, 1)))    
+                                                      + LAMBDA / self.agent.BETA * loss_KL_tf_list.view((current_batch_size, 1)))
                                 self.agent.Q_var_optimizer.zero_grad()
                                 loss_Q_var.backward()
                                 self.agent.Q_var_optimizer.step()
+
 
 
 
