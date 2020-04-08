@@ -96,8 +96,14 @@ class Agent:
         return self.time
 
     def one_hot(self, act):
-        out = np.zeros(self.N_act)
-        out[act] = 1
+        n_dim = np.array(act).ndim
+        if n_dim == 0:
+            out = np.zeros(self.N_act)
+            out[act] = 1
+        else:
+            out = np.zeros((len(act), self.N_act))
+            for i in range(len(act)):
+                out[i, act[i]] = 1
         return out
 
     def tf_normalize(self, obs, show=False):
@@ -119,7 +125,7 @@ class Agent:
             else:
                 return np.concatenate((obs, act))
         else:
-            if act.ndim > 1:
+            if act.ndim >= 1:
                 return np.concatenate((obs, self.one_hot(act)), 1)
             else:
                 #print(obs, self.one_hot(act))
@@ -130,7 +136,9 @@ class Agent:
             return self.Q_KL_tab[obs, act]
         else:
             norm_obs = self.tf_normalize(obs)
+            #print(norm_obs, self.one_hot(act))
             input = self.tf_cat(norm_obs, act)
+            #print(input, self.one_hot(act))
             input_tf = torch.FloatTensor(input)
             if tf:
                 return self.Q_KL_nn(input_tf)
