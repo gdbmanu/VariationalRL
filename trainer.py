@@ -292,7 +292,7 @@ class Trainer():
         #mult_pi = 1 # 1 - pi #
         #return self.agent.BETA * (sum_future_rewards - self.agent.Q_var(past_obs_or_time, past_action) \
         #     - mult_pi *  mult_Q * sum_future_KL)
-        return DO_REWARD * (sum_future_rewards - self.agent.Q_var(past_obs_or_time, past_action)) \
+        return self.agent.PREC * (sum_future_rewards - self.agent.Q_var(past_obs_or_time, past_action)) \
                                   - LAMBDA / self.agent.BETA * mult_Q * sum_future_KL
 
     def online_TD_err_var(self, past_obs, past_obs_or_time, past_action, obs, obs_or_time, reward, done=False):      
