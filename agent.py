@@ -245,7 +245,11 @@ class Agent:
             return act_score / np.sum(act_score)
 
     def greedy_act_max(self, Q):
-        return np.argmax(Q)
+        if np.abs(np.max(Q)) > 1e-6:
+            return np.argmax(Q)
+        else:
+            return None
+       
 
     def epsilon_greedy(self, obs, Q=None, tf=False, actions_set=None, EPS = 0.1):
         Q_obs = self.set_Q_obs(obs, Q=Q, tf=tf, actions_set=actions_set)
@@ -256,10 +260,13 @@ class Agent:
             N_act = len(actions_set)
         act_probs = np.zeros(N_act)
         for act in range(N_act):
-            if act == act_max:
-                act_probs[act] = (1 - EPS) + EPS / N_act
+            if act_max is not None:
+                if act == act_max:
+                    act_probs[act] = (1 - EPS) + EPS / N_act
+                else:
+                    act_probs[act] = EPS / N_act
             else:
-                act_probs[act] = EPS / N_act
+                act_probs[act] = 1 / N_act
         return act_probs
 
     def softmax_choice(self, obs, actions_set=None):

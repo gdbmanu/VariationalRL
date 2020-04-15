@@ -29,7 +29,7 @@ class Trainer():
             self.obs_score_final = np.zeros(self.agent.env.N_obs)
         else:
             self.mem_obs = []
-            self.mem_obs_final = []
+        self.mem_obs_final = []
         if self.agent.continuousAction:
             self.mem_act = []
             self.mu_act = np.zeros(self.agent.N_act)
@@ -74,7 +74,7 @@ class Trainer():
             #    rv = multivariate_normal(mu, Sigma)
             #except:
             try:
-                var = np.var(self.mem_obs, axis=0)
+                var = np.var(self.mem_obs[-b_inf:], axis=0)
                 rv = multivariate_normal(mu, var)
             except:
                 rv = multivariate_normal(mu, np.ones(len(mu)))
@@ -86,7 +86,7 @@ class Trainer():
         if self.agent.isDiscrete:
             return self.obs_score_final / np.sum(self.obs_score_final)
         else:
-            b_inf = min(1000, len(self.mem_obs_final))
+            b_inf = min(int(1/self.OBS_LEAK), len(self.mem_obs_final))
             mu = np.mean(self.mem_obs_final[-b_inf:], axis=0)
             eps = 1e-5
             #Sigma = np.cov(np.array(self.mem_obs_final).T)
@@ -95,7 +95,7 @@ class Trainer():
             #    rv = multivariate_normal(mu, Sigma)
             #except:
             try:
-                var = np.var(self.mem_obs_final, axis=0)
+                var = np.var(self.mem_obs_final[-b_inf:], axis=0)
                 rv = multivariate_normal(mu, var)
             except:
                 rv = multivariate_normal(mu, np.ones(len(mu)))          
@@ -119,7 +119,7 @@ class Trainer():
                 return p
             else:
                 if self.augmentation:
-                    b_inf = min(self.HIST_HORIZON, len(self.mem_obs))
+                    b_inf = len(self.mem_obs) #min(self.HIST_HORIZON, len(self.mem_obs))
                     high = np.max(self.mem_obs[-b_inf:], axis = 0)
                     low = np.min(self.mem_obs[-b_inf:], axis = 0)
                     if np.prod(high - low) > 0:                   
@@ -605,10 +605,11 @@ class Trainer():
                                         sum_future_rewards_tf = torch.zeros((current_batch_size, 1))
 
                                 if self.final:
-                                    if self.agent.GAMMA == 1:
+                                    LAMBDA = 1
+                                    '''if self.agent.GAMMA == 1:
                                         LAMBDA = 100 #self.agent.env.total_steps / 2
                                     else:
-                                        LAMBDA = 1 / self.agent.GAMMA
+                                        LAMBDA = 1 / self.agent.GAMMA'''
                                 else:
                                     LAMBDA = 1
                                     
@@ -658,8 +659,8 @@ class Trainer():
                     self.nb_visits_final[obs] += 1
                     self.obs_score_final *= 1 - self.OBS_LEAK
                     self.obs_score_final[obs] += 1
-                else:
-                    self.mem_obs_final += [obs]
+                
+                self.mem_obs_final += [obs]
 
             if past_time == 0:
                 self.state_probs = self.calc_state_probs()
