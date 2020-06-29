@@ -1,0 +1,56 @@
+\relax 
+\citation{miall1996forward}
+\citation{jordan1992forward}
+\citation{sutton2018reinforcement}
+\citation{kurutach2018model}
+\citation{kingma2013auto}
+\@writefile{toc}{\contentsline {title}{End-Effect Exploration Drive for Effective Motor Learning}{1}\protected@file@percent }
+\@writefile{toc}{\authcount {1}}
+\@writefile{toc}{\contentsline {author}{Emmanuel Dauc\IeC {\'e}}{1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {1}Introduction}{1}\protected@file@percent }
+\citation{bays2007computational}
+\citation{kaelbling1993learning}
+\citation{jordan1992forward}
+\citation{mishra2017prediction,kurutach2018model}
+\citation{bellemare2016unifying}
+\citation{haarnoja2017reinforcement}
+\citation{bellemare2016unifying}
+\citation{lee2019efficient}
+\@writefile{toc}{\contentsline {section}{\numberline {2}Method}{2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.1}A probabilistic view to motor supervision}{2}\protected@file@percent }
+\newlabel{eq:effect-model}{{1}{2}}
+\newlabel{eq:inv-policy}{{2}{2}}
+\newlabel{eq:bayesian-update}{{4}{2}}
+\newlabel{eq:Q-update}{{6}{2}}
+\citation{friston2010free}
+\citation{levine2013guided,fox2015taming,haarnoja2017reinforcement}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.2}A uniform exploration drive}{3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.3}Link with variational inference}{3}\protected@file@percent }
+\newlabel{eq:var-RL-lambda}{{10}{3}}
+\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
+\newlabel{fig:grid1}{{\caption@xref {fig:grid1}{ on input line 330}}{4}}
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces A simple two-rooms environment. Starting from the upper-left corner, the agent is asked to plan a full sequence made of 7 elementary actions $a_1,...,a_7$, each elementary action being in (E,S,W,N). The only read-out from the environment is the final state, and a reward, that is equal to 1 if the final state is the lower-right corner, and 0 otherwise.}}{4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3}Results}{4}\protected@file@percent }
+\@writefile{loa}{\contentsline {algorithm}{\numberline {1}{\ignorespaces End-Effect Exploration Drive (E3D)}}{5}\protected@file@percent }
+\newlabel{algo:E3D}{{1}{5}}
+\@writefile{toc}{\contentsline {section}{\numberline {4}Conclusions}{5}\protected@file@percent }
+\bibcite{bays2007computational}{1}
+\bibcite{bellemare2016unifying}{2}
+\bibcite{fox2015taming}{3}
+\bibcite{friston2010free}{4}
+\bibcite{haarnoja2017reinforcement}{5}
+\bibcite{jordan1992forward}{6}
+\bibcite{kaelbling1993learning}{7}
+\bibcite{kingma2013auto}{8}
+\bibcite{kurutach2018model}{9}
+\bibcite{lee2019efficient}{10}
+\bibcite{levine2013guided}{11}
+\bibcite{miall1996forward}{12}
+\bibcite{mishra2017prediction}{13}
+\bibcite{mnih2013playing}{14}
+\bibcite{mohamed2015variational}{15}
+\bibcite{schmidhuber1991curious}{16}
+\bibcite{sutton2018reinforcement}{17}
+\bibcite{toussaint2009robot}{18}
+\@writefile{lof}{\contentsline {subfigure}{\numberline {a}{\ignorespaces Fig.\nobreakspace  {}2. Task 1 : no reward is provided by the environment. Empirical distribution of the final states, after 5000 trials. {\bf  A.} Uniform policy. {\bf  B.} End-Effect Exploration Drive (E3D) algorithm. $\alpha =0.3$, $\beta = 1$, $\lambda =0.03$, $\eta =10^{-2}$.\relax }}{7}\protected@file@percent }
+\@writefile{lof}{\contentsline {subfigure}{\numberline {b}{\ignorespaces Fig.\nobreakspace  {}3. Task 2 : a reward $r=1$ is provided by the environment when the agent reaches the lower-right corner. Cumulative sum of rewards over 5000 trials, on 10 training sessions. The E3D algorithm is compared with state-of-the-art epsilon-greedy update. $\alpha =0.3$, $\beta = 100$, $\lambda =0.03$, $\eta =10^{-2}$, $\varepsilon =0.1$.\relax }}{7}\protected@file@percent }

@@ -1,0 +1,37 @@
+\begin{thebibliography}{1}
+\providecommand{\url}[1]{\texttt{#1}}
+\providecommand{\urlprefix}{URL }
+\providecommand{\doi}[1]{https://doi.org/#1}
+
+\bibitem{kingma2013auto}
+Kingma, D.P., Welling, M.: Auto-encoding variational bayes. arXiv preprint
+  arXiv:1312.6114  (2013)
+
+\bibitem{levine2013guided}
+Levine, S., Koltun, V.: Guided policy search. In: International Conference on
+  Machine Learning. pp.~1--9 (2013)
+
+\bibitem{mnih2013playing}
+Mnih, V., Kavukcuoglu, K., Silver, D., Graves, A., Antonoglou, I., Wierstra,
+  D., Riedmiller, M.: Playing atari with deep reinforcement learning. arXiv
+  preprint arXiv:1312.5602  (2013)
+
+\bibitem{mohamed2015variational}
+Mohamed, S., Rezende, D.J.: Variational information maximisation for
+  intrinsically motivated reinforcement learning. In: Advances in neural
+  information processing systems. pp. 2125--2133 (2015)
+
+\bibitem{schmidhuber1991curious}
+Schmidhuber, J.: Curious model-building control systems. In: Proc.
+  international joint conference on neural networks. pp. 1458--1463 (1991)
+
+\bibitem{sutton2018reinforcement}
+Sutton, R.S., Barto, A.G.: Reinforcement learning: An introduction. MIT press
+  (2018)
+
+\bibitem{toussaint2009robot}
+Toussaint, M.: Robot trajectory optimization using approximate inference. In:
+  Proceedings of the 26th annual international conference on machine learning.
+  pp. 1049--1056 (2009)
+
+\end{thebibliography}
