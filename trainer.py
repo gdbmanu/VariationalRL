@@ -275,10 +275,11 @@ class Trainer():
         else:
             mult_Q = 1
         if self.final:
-            if self.agent.GAMMA == 1:
+            LAMBDA = 1
+            '''if self.agent.GAMMA == 1:
                 LAMBDA = self.agent.env.total_steps / 2
             else:
-                LAMBDA = 1 / self.agent.GAMMA
+                LAMBDA = 1 / self.agent.GAMMA'''
         else:
             LAMBDA = 1
         if self.agent.do_reward:
