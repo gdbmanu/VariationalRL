@@ -169,7 +169,7 @@ That is the inversion of the model in a probabilistic setup \cite{bays2007comput
 
 %
 
-Assume now $p^*(e|s)$ be a target distribution of effects. This distribution is distinct from  $p(e|s)$ that is the distribution if effects under the current policy. It is assumed to be realizable from an (unknown) target policy $\pi^*(a|s)$, that can be decomposed into:
+Assume now $p^*(e|s)$ be a target distribution of effects. This distribution is distinct from  $p(e|s)$ that is the distribution of effects under the current policy. It is assumed to be realizable from an (unknown) target policy $\pi^*(a|s)$, that can be decomposed into:
 \begin{align}
 \pi^*(a|s) &= \mathbb{E}_{e\sim p(E|s,a)} \pi^*(a|s,e)\frac{p^*(e|s)}{p(e|s,a)}
 \end{align}
@@ -258,7 +258,7 @@ The unified approach proposed by Friston and colleagues is more generally consis
 \begin{equation}
 -\mathbb{E}_{a\sim \pi(a|s); e\sim p(e|s,a)} \beta R(e) + \text{KL}(\pi(a|s)||\pi^*(a)) 
 \end{equation}
-There, interestingly, the current policy $\pi(a|s)$ lies at the crossroad of a reference (maximum entropy) policy $\pi^*$ and reward maximization, with the softmax policy representing a compromise between both tendencies in the discrete case. 
+with $R(e)$ here a measure of the sum of (extrinsic) rewards, up to $e$. Interestingly, the current policy $\pi(a|s)$ lies at the crossroad of a reference (maximum entropy) policy $\pi^*$ and reward maximization, with the softmax policy representing a compromise between both tendencies in the discrete case. 
 
 Extending toward a uniform prior over the space of effects can be written when both considering the motor command and the effect as latent variables that may both explain the current observation, that writes:
 \begin{equation}
@@ -324,7 +324,7 @@ The environment we consider is a grid world with only 18 states and two rooms, w
 Starting in the upper left corner of room A, the agent samples a trajectory $a_{1:7} \in \mathcal{A}$ from a policy $\pi$, that trajectory being composed of 7 elementary displacements. The agent does not have the capability to read the intermediate states it is passing through, it can only read the final state after the full trajectory is realized. 
 In such an environment, a baseline uniform exploration does not provide a uniform distribution of the final states. In particular, when acting at random, the chance to end-up in the first room is significantly higher than the chance to end up in the second room.  
     
-The agent starts from scratch, and has two build a policy $\pi(a)$ and an effect model $p(s_n)$, with $s_n$ the final state. 
+The agent starts from scratch, and has to build a policy $\pi(a)$ and an effect model $p(s_n)$, with $s_n$ the final state. 
 There are two task at hand. A first task is a simple exploration task and the objective is to uniformly sample the effect space, which should imply a non-uniform sampling policy. A second task consists in reaching the lower-right corner, the state that shows the lowest probability with a uniform sampling. For that, a reward of 1 is given when the agent reaches the lower corner, and 0 otherwise.
 
 \begin{figure}[t]\label{fig:grid1}

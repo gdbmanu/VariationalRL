@@ -171,7 +171,7 @@ class Trainer():
             actions_set.append(act)
         return actions_set
     
-    def KL(self, final_obs, done=False):
+    def KL(self, final_obs, done=False, verbose=False):
         if self.final: # Only final state for probability calculation
             if done:
                 final_state_probs = self.calc_final_state_probs()
@@ -179,7 +179,8 @@ class Trainer():
                 if self.agent.isDiscrete:
                     return np.log(final_state_probs[final_obs]) - np.log(ref_probs[final_obs])  # +1
                 else:
-                    print('obs :', final_obs, ', KL loss : ', np.log(final_state_probs(final_obs)) - np.log(ref_probs))
+                    if verbose:
+                        print('obs :', final_obs, ', KL loss : ', np.log(final_state_probs(final_obs)) - np.log(ref_probs))
                     return np.log(final_state_probs(final_obs)) - np.log(ref_probs)  # +1
             else:
                 return 0  # self.agent.Q_KL_tab[past_obs, a]
@@ -622,7 +623,7 @@ class Trainer():
 
 
 
-    def run_episode(self, train=True, render=False):
+    def run_episode(self, train=True, render=False, verbose=False):
         self.agent.init_env()
         self.init_trial()
         obs = self.agent.get_observation()
@@ -691,7 +692,8 @@ class Trainer():
                 self.mem_KL_final.append(KL_final)
                 self.mem_t_final.append(current_time)
                 self.mem_total_reward.append(self.total_reward)
-                print('obs:', obs, 'final KL loss:', KL_final) #, 'final time:', current_time, 'total reward:', self.total_reward)     
+                if verbose:
+                    print('obs:', obs, 'final KL loss:', KL_final) #, 'final time:', current_time, 'total reward:', self.total_reward)     
                 if self.nb_trials % 100 == 0 and self.agent.isDiscrete and not self.agent.isTime:
                     V = np.zeros(self.agent.N_obs)
                     for obs in range(self.agent.N_obs):
@@ -699,7 +701,8 @@ class Trainer():
                     self.mem_V[self.nb_trials] = V
                 break
         toc = time.clock()
-        print('Time elapsed :', toc-tic)
+        if verbose:
+            print('Time elapsed :', toc-tic)
 
 
 class Q_learning_trainer(Trainer):
