@@ -204,12 +204,12 @@ This formula shows that a correction term can be applied to the current policy w
 
 For instance, in a dicrete setup, assuming there exists a $Z(s) \in \mathbb{R}$ such that $\log \pi(a|s) = \beta Q(s,a) + Z(s)$ (softmax policy) makes it possible to update $Q(s,a)$ with the last effect sample $e$ like:
 \begin{align}\label{eq:Q-update}
-Q(s,a) \leftarrow & (1-\alpha) Q(s,a) - \frac{\alpha}{\beta} (\log p(e|s) - \log p^*(e|s))
+Q(s,a) \leftarrow & Q(s,a) - \frac{\alpha}{\beta} (\log p(e|s) - \log p^*(e|s))
 \end{align}  
 This update renders the current policy closer to the optimal one. A side effect of this update is that it also changes the effect model that includes the contribution of the policy (see eq. (\ref{eq:effect-model})). Repeating the operation with a small $\alpha$ and different samples of $a$ and $e$ should, on average, reduce the divergence between $\pi$ and $\pi^*$.
 %\subsection*{Link with reinforcement learning}
-Equation (\ref{eq:Q-update}) also provides an interesting identity when considering the classical (reward-based) TD-error, with $R(e) = \frac{1}{\beta} (\log p^*(e|s) - \log p(e|s))$ taking the role of the (sum of) rewards sample and $R(e) - Q(s,a)$ taking the role of the TD error,
-making it possible, for instance, to provide an intrinsic reward implementing a policy that realizes a known prior on the effects. 
+Equation (\ref{eq:Q-update}) also provides an interesting identity when considering the classical (reward-based) TD-error, with $\frac{1}{\beta} (\log p(e|s) - \log p^*(e|s))$ taking the role of the TD error, i.e. being identified with $Q(s,a)- \tilde{R}(e)$ (with $\tilde{R}(e)$ a putative sum of rewards up to $e$),
+making it possible, for instance, to set up an intrinsic reward implementing a policy that realizes a known prior on the effects. 
 This intrinsic reward is called here the ``End-Effect Drive''.
 
 This supervised approach to policy relies on an effect model $p(e|s)$ that is less detailed than a forward model. Various kinds of approximate forward models can be found in goal-directed motor control literature, like dynamic goals \cite{kaelbling1993learning} and distal teacher \cite{jordan1992forward}, though generally learning to associate the current action with a distal effect \cite{mishra2017prediction,kurutach2018model}. In our case, no specific action-effect association is provided by the model and only the sampling of the environment dynamics, whatever the action, is considered. This ``action-agnostic'' is close to the concept of state-visit counter, as it is proposed in \cite{bellemare2016unifying}.
@@ -248,7 +248,7 @@ By construction, the E3D is positive when $e$ is rarely visited under the curren
 %\end{align}
 
 \subsection{Link with variational inference}
-A key intuition in Friston's  ``unified brain theory'' paper \cite{friston2010free} is the mapping of the utility, as it is defined in economy and reinforcement learning, with a measure of negative surprise (i.e the log probability over the sensory data distribution). Combined with a prior distribution in the effector space, the action takes the role of a latent variable that is updated so as to reduce the prediction error with regards to the prior, much like in predictive coding. 
+A key intuition in Friston's  ``unified brain theory'' paper \cite{friston2010free} is the mapping of the utility, as it is defined in economy and reinforcement learning, with a measure of negative surprise (i.e the log probability over the sensory data distribution). Combined with a prior distribution in the control space, the action takes the role of a latent variable that is updated so as to reduce the prediction error with regards to the prior, much like in predictive coding. 
 
 The unified approach proposed by Friston and colleagues is more generally consistent with the variational auto-encoder principles, in which a latent description of the data is constructed so as to implement a trade-off between the complexity of the description and the accuracy of the prediction. Variational reinforcement learning was recently proposed as a way to reconcile the discrete view to motor control with the continuous processing of the latent variable in variational auto-encoders \cite{levine2013guided,fox2015taming,haarnoja2017reinforcement}, with the motor command playing the role of a latent code for the reward data.  In our simplified writing, the utility maximization (or surprise minimization) rests on minimizing:
 %\begin{equation}
@@ -279,7 +279,7 @@ After reading $e$, %the update of $Q$ should look like :
 %and 
 the TD-error should be defined as:
 \begin{align}\label{eq:var-RL-lambda}
-\text{TD}(s,a,e) = \lambda(R(e) - Q(s,a)) + \frac{1}{\beta} (\log p^*(e) - \log p(e|s)))
+\text{TD}(s,a,e) = \lambda(Q(s,a) - R(e)) + \frac{1}{\beta} (\log p(e|s) - \log p^*(e)))
 \end{align}
 With $\lambda$ a precision hyperparameter accounting for the different magnitudes of rewards, allowing to manipulate the balance between reward seeking and exploration-seeking drives.
 Interestingly, the reward $R(e)$ has here the role of a regularizer with regards to the current Q-value. The sum of the future rewards can be estimated using the classical Bellman recurrence equation, i.e. $Q(s,a) \sim r(s,a) + Q(s', a')$, in which case the training procedure needs to maintain an estimate of a standard action-value function $Q_\text{ref}(s,a)$ to update the actual parameters of the policy $Q(s,a)$.  
