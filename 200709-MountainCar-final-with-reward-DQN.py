@@ -7,7 +7,7 @@ ENV_NAME = 'MountainCar-v0' #'CartPole-v1' #'FrozenLake-v0' #
 env = gym.make(ENV_NAME)
 
 GAMMA=1
-OBS_LEAK = 1e-6 #1e-3
+OBS_LEAK = 1e-6
 Q_VAR_MULT = 10
 ALPHA = 1e-3 / Q_VAR_MULT #3e-3
 augmentation = True
@@ -34,20 +34,24 @@ if not os.path.isfile(data_path):
     mem_pred_var = {}
 
     tic = time.clock()
-    for BETA in BETA_range:
-        mem_obs_final[BETA] = {}
-        mem_total_reward[BETA] = {}
-        mem_pred_reward[BETA] = {}
-        mem_pred_var[BETA] = {}
 
-        for PREC in PREC_range:
-            print("BETA=", BETA, ", PREC=", PREC)
-            mem_obs_final[BETA][PREC] = {}
-            mem_total_reward[BETA][PREC] = {}
-            mem_pred_reward[BETA][PREC] = {}
-            mem_pred_var[BETA][PREC] = {}
+    for trial in range(10):
 
-            for trial in range(10):
+        mem_obs_final[trial] = {}
+        mem_total_reward[trial] = {}
+        mem_pred_reward[trial] = {}
+        mem_pred_var[trial] = {}
+
+        for BETA in BETA_range:
+
+
+            mem_obs_final[trial][BETA] = {}
+            mem_total_reward[trial][BETA] = {}
+            mem_pred_reward[trial][BETA] = {}
+            mem_pred_var[trial][BETA] = {}
+
+            for PREC in PREC_range:
+                print("BETA=", BETA, ", PREC=", PREC)
                 toc = time.clock()
                 print("Elapsed time:", toc - tic)
 
@@ -79,14 +83,14 @@ if not os.path.isfile(data_path):
 
                 obs = (0, 0)
 
-                mem_obs_final[BETA][PREC][trial] = trainer.mem_obs_final
-                mem_total_reward[BETA][PREC][trial] = trainer.mem_total_reward
+                mem_obs_final[trial][BETA][PREC] = trainer.mem_obs_final
+                mem_total_reward[trial][BETA][PREC] = trainer.mem_total_reward
 
                 pred_reward = trainer.calc_sum_future_rewards(0, obs, done=False)
-                mem_pred_reward[BETA][PREC][trial] = pred_reward
+                mem_pred_reward[trial][BETA][PREC] = pred_reward
 
                 pred_var = trainer.agent.softmax_expectation(obs, trainer.agent.set_Q_obs(obs))
-                mem_pred_var[BETA][PREC][trial] = pred_var
+                mem_pred_var[trial][BETA][PREC] = pred_var
 
                 data = np.array((mem_obs_final, mem_total_reward, mem_pred_reward, mem_pred_var))
                 np.save(data_path, data)
