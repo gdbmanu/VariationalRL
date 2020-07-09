@@ -1,8 +1,35 @@
 import numpy as np
+import random
 import gym
 from environment import Environment
 import torch
 import torch.nn as nn
+from collections import namedtuple
+
+
+Transition = namedtuple('Transition',
+                        ('obs', 'action', 'sum_future_KL', 'sum_future_rewards'))
+
+
+class ReplayMemory(object):
+
+    def __init__(self, capacity):
+        self.capacity = capacity
+        self.memory = []
+        self.position = 0
+
+    def push(self, *args):
+        """Saves a transition."""
+        if len(self.memory) < self.capacity:
+            self.memory.append(None)
+        self.memory[self.position] = Transition(*args)
+        self.position = (self.position + 1) % self.capacity
+
+    def sample(self, batch_size):
+        return random.sample(self.memory, batch_size)
+
+    def __len__(self):
+        return len(self.memory)
 
 class Agent:
 
@@ -23,6 +50,8 @@ class Agent:
         self.offPolicy = offPolicy
         self.Q_VAR_MULT = Q_VAR_MULT
         if not self.isDiscrete:
+            self.memory = ReplayMemory(10000)
+            
             N_INPUT = self.N_obs + self.N_act
             N_HIDDEN = 50
             
@@ -40,8 +69,8 @@ class Agent:
             self.Q_KL_nn = nn.Sequential(
                 nn.Linear(N_INPUT, N_HIDDEN, bias=True),
                 nn.ReLU(),
-                nn.Linear(N_HIDDEN, N_HIDDEN, bias=True),
-                nn.ReLU(),
+                #nn.Linear(N_HIDDEN, N_HIDDEN, bias=True),
+                #nn.ReLU(),
                 nn.Linear(N_HIDDEN, 1, bias=True)
             )
             self.Q_KL_optimizer = torch.optim.Adam(self.Q_KL_nn.parameters(), lr = self.ALPHA) #!! *30 ?? TODO : à vérifier
@@ -60,7 +89,7 @@ class Agent:
                 #nn.ReLU(),
                 nn.Linear(N_HIDDEN, 1, bias=True)
             )
-            self.Q_var_optimizer = torch.optim.Adam(self.Q_var_nn.parameters(), lr=self.ALPHA * Q_VAR_MULT )
+            self.Q_var_optimizer = torch.optim.SGD(self.Q_var_nn.parameters(), lr=self.ALPHA * Q_VAR_MULT )
         else:
             if self.isTime:
                 self.Q_ref_tab = 1e-6 * np.random.uniform(size=(self.env.total_steps, self.N_act))  # target Q
