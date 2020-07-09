@@ -6,10 +6,8 @@ import numpy as np
 ENV_NAME = 'MountainCar-v0' #'CartPole-v1' #'FrozenLake-v0' #
 env = gym.make(ENV_NAME)
 
-BETA = 50
 GAMMA=1
 OBS_LEAK = 1e-6 #1e-3
-PREC = 2e-4 #0.03 # LAMBDA # regularizer
 Q_VAR_MULT = 10
 ALPHA = 1e-3 / Q_VAR_MULT #3e-3
 augmentation = True
@@ -44,10 +42,10 @@ if not os.path.isfile(data_path):
 
         for PREC in PREC_range:
             print("BETA=", BETA, ", PREC=", PREC)
-            mem_obs_final[BETA][trial] = {}
-            mem_total_reward[BETA][trial] = {}
-            mem_pred_reward[BETA][trial] = {}
-            mem_pred_var[BETA][trial] = {}
+            mem_obs_final[BETA][PREC] = {}
+            mem_total_reward[BETA][PREC] = {}
+            mem_pred_reward[BETA][PREC] = {}
+            mem_pred_var[BETA][PREC] = {}
 
             for trial in range(10):
                 toc = time.clock()
@@ -90,8 +88,8 @@ if not os.path.isfile(data_path):
                 pred_var = trainer.agent.softmax_expectation(obs, trainer.agent.set_Q_obs(obs))
                 mem_pred_var[BETA][PREC][trial] = pred_var
 
-    data = np.array((mem_obs_final, mem_total_reward, mem_pred_reward, mem_pred_var))
-    np.save(data_path, data)
+                data = np.array((mem_obs_final, mem_total_reward, mem_pred_reward, mem_pred_var))
+                np.save(data_path, data)
 else:
     data = np.load(data_path)
     mem_obs_final = data[0]
