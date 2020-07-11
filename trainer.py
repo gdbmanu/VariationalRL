@@ -389,38 +389,44 @@ class Trainer():
                 test_done = final_time == time + 1
                 liste_KL[time] = self.KL(new_obs, done=test_done)
 
-            if self.nb_trials > 10:
-                # SECOND LOOP
-                for time in range(final_time):
-                    ## !!!! faux dans le cas "full KL" et "full reward" !!!! TODO ##
-                    past_obs = self.trajectory[time]
-                    if self.agent.isTime:
-                        past_obs_or_time = time
-                    else:
-                        past_obs_or_time = self.trajectory[time]
-                    past_action = self.action_history[time]
-                    #actions_set = self.actions_set_history[time]
+            # SECOND LOOP
+            for time in range(final_time):
+                ## !!!! faux dans le cas "full KL" et "full reward" !!!! TODO ##
+                past_obs = self.trajectory[time]
+                if self.agent.isTime:
+                    past_obs_or_time = time
+                else:
+                    past_obs_or_time = self.trajectory[time]
+                past_action = self.action_history[time]
+                #actions_set = self.actions_set_history[time]
 
-                    sum_future_rewards = np.sum(np.array(self.reward_history[time:]) * \
-                                       self.agent.GAMMA **(np.arange(time, final_time) - time))
-                    
-                    #if time == 0:
-                    #    sum_future_rewards_list = [sum_future_rewards]
-                    #else:
-                    #    sum_future_rewards_list.append(sum_future_rewards)
+                sum_future_rewards = np.sum(np.array(self.reward_history[time:]) * \
+                                   self.agent.GAMMA **(np.arange(time, final_time) - time))
 
-                    if not self.Q_learning:
-                        sum_future_KL = np.sum(np.array(liste_KL[time:]) * \
-                                               self.agent.GAMMA **(np.arange(time, final_time) - time))
-                    else:
-                        sum_future_KL = 0
-                        
-                    #if time == 0:
-                    #    sum_future_KL_list = [sum_future_KL]
-                    #else:
-                    #    sum_future_KL_list.append(sum_future_KL)'''
+                #if time == 0:
+                #    sum_future_rewards_list = [sum_future_rewards]
+                #else:
+                #    sum_future_rewards_list.append(sum_future_rewards)
+
+                if not self.Q_learning:
+                    sum_future_KL = np.sum(np.array(liste_KL[time:]) * \
+                                           self.agent.GAMMA **(np.arange(time, final_time) - time))
+                else:
+                    sum_future_KL = 0
+
+                #if time == 0:
+                #    sum_future_KL_list = [sum_future_KL]
+                #else:
+                #    sum_future_KL_list.append(sum_future_KL)'''
+                if not self.agent.isDiscrete:
+                    self.agent.memory.push(past_obs, 
+                                           past_action, 
+                                           torch.FloatTensor([sum_future_KL]), 
+                                           torch.FloatTensor([sum_future_rewards])
+                                          )
 
 
+                if self.nb_trials > 10:
                     if self.agent.isDiscrete:
                         TD_err_ref = self.calc_TD_err_ref(sum_future_rewards, past_obs_or_time, past_action)
                         self.agent.Q_ref_tab[past_obs_or_time, past_action] -= self.agent.ALPHA * TD_err_ref
@@ -431,12 +437,7 @@ class Trainer():
                                                           past_obs_or_time,
                                                           past_action)
                         self.agent.Q_var_tab[past_obs_or_time, past_action] -= self.agent.ALPHA * TD_err_var
-                    else:
-                        self.agent.memory.push(past_obs, 
-                                               past_action, 
-                                               torch.FloatTensor([sum_future_KL]), 
-                                               torch.FloatTensor([sum_future_rewards])
-                                              )
+                    else:                        
                         BATCH_SIZE = 20
                         if len(self.agent.memory) > BATCH_SIZE:
                             transitions = self.agent.memory.sample(BATCH_SIZE)
