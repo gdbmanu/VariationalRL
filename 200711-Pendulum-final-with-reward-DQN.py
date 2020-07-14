@@ -23,7 +23,7 @@ isTime=False
 import time
 import os
 
-data_path = '200710-Pendulum-final-with-reward-DQN.npy'
+data_path = '200711-Pendulum-final-with-reward-DQN.npy'
 BETA_range = [0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500]
 PREC_range = [1e-7, 3e-7, 1e-6, 3e-6, 1e-5, 3e-5, 1e-4, 3e-4, 1e-3, 3e-3]
 
@@ -80,15 +80,16 @@ if not os.path.isfile(data_path):
                         # print("Trajectory: ", trainer.trajectory)
                         print("Total reward got: %.4f" % trainer.total_reward)
 
-                obs = (0, 0, 0, 0)
+                obs = (0, 0, 0)
+                act = (0,)
 
                 mem_obs_final[trial][BETA][PREC] = trainer.mem_obs_final
                 mem_total_reward[trial][BETA][PREC] = trainer.mem_total_reward
 
-                pred_reward = trainer.calc_sum_future_rewards(0, obs, done=False)
+                pred_reward = 0 #trainer.calc_sum_future_rewards(0, obs, done=False)
                 mem_pred_reward[trial][BETA][PREC] = pred_reward
 
-                pred_var = trainer.agent.softmax_expectation(obs, trainer.agent.set_Q_obs(obs))
+                pred_var = agent.Q_var(obs, act) #trainer.agent.softmax_expectation(obs, trainer.agent.set_Q_obs(obs))
                 mem_pred_var[trial][BETA][PREC] = pred_var
 
                 data = np.array((mem_obs_final, mem_total_reward, mem_pred_reward, mem_pred_var))

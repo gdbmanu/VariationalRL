@@ -6,13 +6,13 @@ import numpy as np
 ENV_NAME = 'Pendulum-v0' #'MountainCar-v0' #'FrozenLake-v0' #
 env = gym.make(ENV_NAME)
 
-GAMMA=1
+GAMMA=0.9
 OBS_LEAK = 1e-6
 Q_VAR_MULT = 10
-ALPHA = 1e-3 / Q_VAR_MULT #3e-3
+ALPHA = 1e-5 / Q_VAR_MULT #3e-3
 augmentation = True
-do_reward = False
-final = True
+do_reward = True
+final = False
 
 N = 1000
 
@@ -23,7 +23,7 @@ isTime=False
 import time
 import os
 
-data_path = '200711-Pendulum-final-no-reward-DQN.npy'
+data_path = '200712-Pendulum-final-with-reward-DQN.npy'
 BETA_range = [0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500]
 PREC_range = [1e-7, 3e-7, 1e-6, 3e-6, 1e-5, 3e-5, 1e-4, 3e-4, 1e-3, 3e-3]
 
@@ -43,7 +43,6 @@ if not os.path.isfile(data_path):
         mem_pred_var[trial] = {}
 
         for BETA in BETA_range:
-
 
             mem_obs_final[trial][BETA] = {}
             mem_total_reward[trial][BETA] = {}
@@ -81,7 +80,7 @@ if not os.path.isfile(data_path):
                         # print("Trajectory: ", trainer.trajectory)
                         print("Total reward got: %.4f" % trainer.total_reward)
 
-                obs = np.array((0, 0, 0))
+                obs = (0, 0, 0)
                 act = (0,)
 
                 mem_obs_final[trial][BETA][PREC] = trainer.mem_obs_final
