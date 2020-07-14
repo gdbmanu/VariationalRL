@@ -14,7 +14,7 @@ augmentation = True
 do_reward = False
 final = True
 
-N = 1000
+N = 10
 
 offPolicy = False
 monte_carlo=True
