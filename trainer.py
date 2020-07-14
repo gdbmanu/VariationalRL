@@ -411,6 +411,11 @@ class Trainer():
                 if not self.Q_learning:
                     sum_future_KL = np.sum(np.array(liste_KL[time:]) * \
                                            self.agent.GAMMA **(np.arange(time, final_time) - time))
+                    Q_var_pred = self.agent.Q_var(past_obs_or_time, past_action)
+                    if self.nb_trials > 20:
+                        R_tilde = Q_var_pred - 1/ self.agent.BETA * sum_future_KL
+                    else:
+                        R_tilde = - 1/ self.agent.BETA * sum_future_KL
                 else:
                     sum_future_KL = 0
 
@@ -422,7 +427,8 @@ class Trainer():
                     self.agent.memory.push(past_obs, 
                                            past_action, 
                                            torch.FloatTensor([sum_future_KL]), 
-                                           torch.FloatTensor([sum_future_rewards])
+                                           torch.FloatTensor([sum_future_rewards]),
+                                           torch.FloatTensor([R_tilde])
                                           )
 
 
@@ -448,6 +454,7 @@ class Trainer():
                             obs_batch = batch.obs #torch.cat(batch.obs)
                             act_batch = batch.action #torch.cat(batch.action)
                             sum_future_KL_batch = torch.cat(batch.sum_future_KL)
+                            R_tilde_batch = torch.cat(batch.R_tilde)
                             if self.agent.do_reward:                            
                                 sum_future_rewards_batch = torch.cat(batch.sum_future_rewards)
                             else:
@@ -465,14 +472,21 @@ class Trainer():
                                 Q_var_pred_tf = self.agent.Q_var(obs_batch,
                                                              act_batch,
                                                              tf=True)
-                                R_tilde_tf = Q_var_pred_tf.detach() - 1/ self.agent.BETA * sum_future_KL_batch
+                                R_tilde_batch = Q_var_pred_tf.detach() - 1/ self.agent.BETA * sum_future_KL_batch
                                 loss_Q_var = torch.sum(
                                       0.5 * self.agent.PREC *  torch.pow(Q_var_pred_tf - sum_future_rewards_batch, 2) 
-                                    + 0.5 * torch.pow(Q_var_pred_tf - R_tilde_tf, 2)
+                                    + 0.5 * torch.pow(Q_var_pred_tf - R_tilde_batch, 2)
                                                       )
                                 self.agent.Q_var_optimizer.zero_grad()
                                 loss_Q_var.backward()
-                                self.agent.Q_var_optimizer.step()                           
+                                self.agent.Q_var_optimizer.step() 
+                    #print('')
+                    #print(time) 
+                    #print('sum KL', sum_future_KL)
+                    #print('future rewards', sum_future_rewards_batch.detach().numpy()[0])
+                    #print('R_tilde', R_tilde_batch.detach().numpy())
+                    #print('Q_var', Q_var_pred_tf.detach().numpy()[0])
+                    #print('Loss', loss_Q_var.detach().numpy())
 
 
                 if False: #not self.agent.isDiscrete:

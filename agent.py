@@ -8,7 +8,7 @@ from collections import namedtuple
 
 
 Transition = namedtuple('Transition',
-                        ('obs', 'action', 'sum_future_KL', 'sum_future_rewards'))
+                        ('obs', 'action', 'sum_future_KL', 'sum_future_rewards', 'R_tilde'))
 
 
 class ReplayMemory(object):
@@ -34,7 +34,7 @@ class ReplayMemory(object):
 class Agent:
 
     def __init__(self, env, ALPHA=0.01, GAMMA=0.9, BETA = 1, PREC=1, isTime=False, do_reward = True,
-                 Q_VAR_MULT=30, offPolicy=False):
+                 Q_VAR_MULT=30, offPolicy=False, optim='SGD'):
         #self.total_reward = 0.0
         self.env = env
         self.isDiscrete = type(env) is Environment or type(env) is gym.spaces.discrete.Discrete
@@ -73,7 +73,10 @@ class Agent:
                 #nn.ReLU(),
                 nn.Linear(N_HIDDEN, 1, bias=True)
             )
-            self.Q_KL_optimizer = torch.optim.Adam(self.Q_KL_nn.parameters(), lr = self.ALPHA) #!! *30 ?? TODO : à vérifier
+            if optim == 'Adam':
+                self.Q_KL_optimizer = torch.optim.Adam(self.Q_KL_nn.parameters(), lr = self.ALPHA) #!! *30 ?? TODO : à vérifier
+            else:
+                self.Q_KL_optimizer = torch.optim.SGD(self.Q_KL_nn.parameters(), lr = self.ALPHA)
             self.Q_ref_nn = nn.Sequential(
                 nn.Linear(N_INPUT, N_HIDDEN, bias=True),
                 nn.ReLU(),
@@ -81,7 +84,10 @@ class Agent:
                 #nn.ReLU(),
                 nn.Linear(N_HIDDEN, 1, bias=True)
             )
-            self.Q_ref_optimizer = torch.optim.Adam(self.Q_ref_nn.parameters(), lr = self.ALPHA)
+            if optim == 'Adam':
+                self.Q_ref_optimizer = torch.optim.Adam(self.Q_ref_nn.parameters(), lr = self.ALPHA)
+            else:
+                self.Q_ref_optimizer = torch.optim.SGD(self.Q_ref_nn.parameters(), lr = self.ALPHA)
             self.Q_var_nn = nn.Sequential(
                 nn.Linear(N_INPUT, N_HIDDEN, bias=True),
                 nn.ReLU(),
@@ -89,7 +95,10 @@ class Agent:
                 #nn.ReLU(),
                 nn.Linear(N_HIDDEN, 1, bias=True)
             )
-            self.Q_var_optimizer = torch.optim.SGD(self.Q_var_nn.parameters(), lr=self.ALPHA * Q_VAR_MULT )
+            if optim == 'Adam':
+                self.Q_var_optimizer = torch.optim.Adam(self.Q_var_nn.parameters(), lr=self.ALPHA * Q_VAR_MULT )
+            else:
+                self.Q_var_optimizer = torch.optim.SGD(self.Q_var_nn.parameters(), lr=self.ALPHA * Q_VAR_MULT )
         else:
             if self.isTime:
                 self.Q_ref_tab = 1e-6 * np.random.uniform(size=(self.env.total_steps, self.N_act))  # target Q

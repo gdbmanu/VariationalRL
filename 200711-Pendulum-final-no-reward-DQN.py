@@ -14,7 +14,7 @@ augmentation = True
 do_reward = False
 final = True
 
-N = 1000
+N = 10
 
 offPolicy = False
 monte_carlo=True
@@ -81,7 +81,7 @@ if not os.path.isfile(data_path):
                         # print("Trajectory: ", trainer.trajectory)
                         print("Total reward got: %.4f" % trainer.total_reward)
 
-                obs = (0, 0, 0, 0)
+                obs = (0, 0, 0)
 
                 mem_obs_final[trial][BETA][PREC] = trainer.mem_obs_final
                 mem_total_reward[trial][BETA][PREC] = trainer.mem_total_reward
