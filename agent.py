@@ -206,18 +206,24 @@ class Agent:
             return self.Q_var_tab[obs_or_time, act]
         else:
             norm_obs_or_time = self.tf_normalize(obs_or_time)
-            input = self.tf_cat(norm_obs_or_time, act)
-            input_tf = torch.FloatTensor(input)
+            if isinstance(act, list):
+                inputs = []
+                for a in act:
+                    cat_input = self.tf_cat(norm_obs_or_time, a)
+                    inputs.append([cat_input])                   
+            else:
+                inputs = self.tf_cat(norm_obs_or_time, act)
+            inputs_tf = torch.FloatTensor(inputs)
             if tf:
-                return self.Q_var_nn(input_tf)
+                return self.Q_var_nn(inputs_tf)
             else:
                 with torch.no_grad():
-                    return self.Q_var_nn(input_tf).data.numpy().squeeze() #[0]
+                    return self.Q_var_nn(inputs_tf).data.numpy().squeeze() #[0]
 
     def set_Q_obs(self, obs, Q=None, tf=False, actions_set=None):
         if Q is None:
             Q = self.Q_var
-        if not tf:
+        '''if not tf:
             if actions_set is None:
                 Q_obs = np.zeros(self.N_act)
             else:
@@ -239,7 +245,10 @@ class Agent:
                     else:
                         Q_obs = torch.cat((Q_obs, Q(obs, a, tf=tf)), 0)
                 else:
-                    Q_obs[indice_a] = Q(obs, a, tf=tf)
+                    Q_obs[indice_a] = Q(obs, a, tf=tf)'''
+        if actions_set is None:
+            actions_set = range(self.N_act)
+        Q_obs = Q(obs, actions_set, tf=tf)
         return Q_obs
         
 

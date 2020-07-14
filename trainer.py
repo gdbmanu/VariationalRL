@@ -409,7 +409,10 @@ class Trainer():
                 #    sum_future_rewards_list.append(sum_future_rewards)
 
                 if not self.Q_learning:
-                    sum_future_KL = np.sum(np.array(liste_KL[time:]) * \
+                    if self.final:
+                        sum_future_KL = np.sum(np.array(liste_KL[time:]))
+                    else:
+                        sum_future_KL = np.sum(np.array(liste_KL[time:]) * \
                                            self.agent.GAMMA **(np.arange(time, final_time) - time))
                     Q_var_pred = self.agent.Q_var(past_obs_or_time, past_action)
                     if self.nb_trials > 20:
