@@ -1,10 +1,24 @@
 import numpy as np
 from scipy.stats import multivariate_normal
+from scipy.special import gamma
 from environment import Environment
 from agent import Transition
 
 import torch
 import time
+
+class KNN_prob():
+    def __init__(self, data, k=10):
+        self.data = data
+        self.n, self.d = self.data.shape
+        self.V = np.pi**(self.d/2) / gamma(self.d/2 + 1)
+        self.k = k
+        self.q = k/self.n        
+        #print(self.n, self.d, self.q)
+    def __call__(self, x):
+        dists = np.sqrt(np.sum((x - self.data)**2,1))
+        dist = np.quantile(dists, self.q)
+        return self.k/ (self.n * self.V * dist**self.d)
 
 class Trainer():
 
@@ -12,14 +26,14 @@ class Trainer():
                  OBS_LEAK=1e-3,
                  EPSILON=1e-3,
                  N_PART=10,
-                 HIST_HORIZON=10000,
                  ref_prob='unif',
                  final=False,
                  monte_carlo=False,
                  Q_learning=False,
                  KL_reward=False,
                  ignore_pi=False,
-                 augmentation=True):
+                 augmentation=True,
+                 KNN_prob=False):
         self.agent = agent
         self.nb_trials = 0
         self.init_trial(update=False)
@@ -41,7 +55,7 @@ class Trainer():
         self.OBS_LEAK = OBS_LEAK
         self.EPSILON = EPSILON
         self.N_PART=N_PART
-        self.HIST_HORIZON = HIST_HORIZON
+        self.HIST_HORIZON = agent.HIST_HORIZON
         self.mem_V = {}
         self.ref_prob = ref_prob
         self.final = final
@@ -50,6 +64,7 @@ class Trainer():
         self.KL_reward = KL_reward
         self.ignore_pi = ignore_pi
         self.augmentation = augmentation
+        self.KNN_prob = KNN_prob
 
     def init_trial(self, update=True):
         if update:
@@ -86,21 +101,24 @@ class Trainer():
         # return self.nb_visits/np.sum(self.nb_visits)
         if self.agent.isDiscrete:
             return self.obs_score_final / np.sum(self.obs_score_final)
-        else:
+        else:                
             b_inf = min(int(1/self.OBS_LEAK), len(self.mem_obs_final))
-            mu = np.mean(self.mem_obs_final[-b_inf:], axis=0)
-            eps = 1e-5
-            #Sigma = np.cov(np.array(self.mem_obs_final).T)
-            #Sigma = (1-eps) * np.cov(np.array(self.mem_obs_final[-b_inf:]).T) + eps * np.diag(np.ones(self.agent.N_obs))
-            #try:
-            #    rv = multivariate_normal(mu, Sigma)
-            #except:
-            try:
-                var = np.var(self.mem_obs_final[-b_inf:], axis=0)
-                rv = multivariate_normal(mu, var)
-            except:
-                rv = multivariate_normal(mu, np.ones(len(mu)))          
-            return rv.pdf # !! TODO a verifier 
+            if self.KNN_prob and self.nb_trials>10:
+                return KNN_prob(np.array(self.mem_obs_final[-b_inf:]), k=10)
+            else:
+                mu = np.mean(self.mem_obs_final[-b_inf:], axis=0)
+                eps = 1e-5
+                #Sigma = np.cov(np.array(self.mem_obs_final).T)
+                #Sigma = (1-eps) * np.cov(np.array(self.mem_obs_final[-b_inf:]).T) + eps * np.diag(np.ones(self.agent.N_obs))
+                #try:
+                #    rv = multivariate_normal(mu, Sigma)
+                #except:
+                try:
+                    var = np.var(self.mem_obs_final[-b_inf:], axis=0)
+                    rv = multivariate_normal(mu, var)
+                except:
+                    rv = multivariate_normal(mu, np.ones(len(mu)))          
+                return rv.pdf # !! TODO a verifier 
 
         
     def calc_ref_probs(self, obs, EPSILON=1e-3, final=False):
@@ -653,8 +671,12 @@ class Trainer():
                 self.agent.num_episode += 1
             else:
                 self.mem_obs += [obs]
+                if len(self.mem_obs) > self.HIST_HORIZON:
+                    del self.mem_obs[0]
                 if self.agent.continuousAction:
                     self.mem_act += [past_action]
+                    if len(self.mem_act) > self.HIST_HORIZON:
+                        del self.mem_act[0]
 
             if done:
                 if self.agent.isDiscrete:
@@ -712,23 +734,23 @@ class Q_learning_trainer(Trainer):
                  EPSILON=1e-3,
                  OBS_LEAK=1e-3,
                  N_PART=10,
-                 HIST_HORIZON=10000,
                  ref_prob='unif',
                  final=False,
                  monte_carlo=False,
                  KL_reward=False,
-                 augmentation=False):
+                 augmentation=False,
+                 KNN_prob=False):
         super().__init__(agent,
                          EPSILON=EPSILON,
                          OBS_LEAK=OBS_LEAK,
                          N_PART=N_PART,
-                         HIST_HORIZON=HIST_HORIZON,
                          ref_prob=ref_prob,
                          final=final,
                          monte_carlo=monte_carlo,
                          Q_learning=True,
                          KL_reward=KL_reward,
-                         augmentation=augmentation)
+                         augmentation=augmentation,
+                         KNN_prob=KNN_prob)
 
 
 class KL_Q_learning_trainer(Trainer):
@@ -737,23 +759,23 @@ class KL_Q_learning_trainer(Trainer):
                  EPSILON=1e-3,
                  OBS_LEAK=1e-3,
                  N_PART=10,
-                 HIST_HORIZON=10000,
                  ref_prob='unif',
                  final=False,
                  monte_carlo=False,
                  KL_reward=True,
-                 augmentation=True):
+                 augmentation=True,
+                 KNN_prob=False):
         super().__init__(agent,
                          EPSILON=EPSILON,
                          OBS_LEAK=OBS_LEAK,
                          N_PART=N_PART,
-                         HIST_HORIZON=HIST_HORIZON,
                          ref_prob=ref_prob,
                          final=final,
                          monte_carlo=monte_carlo,
                          Q_learning=True,
                          KL_reward=KL_reward,
-                         augmentation=augmentation)
+                         augmentation=augmentation,
+                         KNN_prob=KNN_prob)
 
 
 class One_step_variational_trainer(Trainer):
@@ -762,26 +784,26 @@ class One_step_variational_trainer(Trainer):
                  EPSILON=1e-3,
                  OBS_LEAK=1e-3,
                  N_PART=10,
-                 HIST_HORIZON=10000,
                  ref_prob='unif',
                  final=False,
                  monte_carlo=False,
                  Q_learning=False,
                  KL_reward=False,
                  ignore_pi = False,
-                 augmentation=True):
+                 augmentation=True,
+                 KNN_prob=False):
         super().__init__(agent,
                          EPSILON=EPSILON,
                          OBS_LEAK=OBS_LEAK,
                          N_PART=N_PART,
-                         HIST_HORIZON=HIST_HORIZON,
                          ref_prob=ref_prob,
                          final=final,
                          monte_carlo=monte_carlo,
                          Q_learning=False,
                          KL_reward=KL_reward,
                          ignore_pi=ignore_pi,
-                         augmentation=augmentation)
+                         augmentation=augmentation,
+                         KNN_prob=KNN_prob)
 
     # agent.Q_var update # DEPRECATED ??
     def KL_diff(self, past_obs, a, new_obs, done=False, past_time=None):
@@ -797,26 +819,26 @@ class Final_variational_trainer(Trainer):
                  EPSILON=1e-3,
                  OBS_LEAK=1e-3,
                  N_PART=10,
-                 HIST_HORIZON=10000,
                  ref_prob='unif',
                  final=False,
                  monte_carlo=False,
                  Q_learning=False,
                  KL_reward=False,
                  ignore_pi = False,
-                 augmentation=True):
+                 augmentation=True,
+                 KNN_prob=False):
         super().__init__(agent,
                          EPSILON=EPSILON,
                          OBS_LEAK=OBS_LEAK,
                          N_PART=N_PART,
-                         HIST_HORIZON=HIST_HORIZON,
                          ref_prob=ref_prob,
                          final=final,
                          monte_carlo=monte_carlo,
                          Q_learning=Q_learning,
                          KL_reward=KL_reward,
                          ignore_pi=ignore_pi,
-                         augmentation=augmentation)
+                         augmentation=augmentation,
+                         KNN_prob=KNN_prob)
 
     # agent.Q_var update
     def KL_diff(self, past_obs, a, final_obs, done=False, past_time=None):

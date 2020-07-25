@@ -34,7 +34,7 @@ class ReplayMemory(object):
 class Agent:
 
     def __init__(self, env, ALPHA=0.01, GAMMA=0.9, BETA = 1, PREC=1, isTime=False, do_reward = True,
-                 Q_VAR_MULT=30, offPolicy=False, optim='SGD'):
+                 Q_VAR_MULT=30, offPolicy=False, optim='SGD', HIST_HORIZON=10000):
         #self.total_reward = 0.0
         self.env = env
         self.isDiscrete = type(env) is Environment or type(env) is gym.spaces.discrete.Discrete
@@ -49,18 +49,19 @@ class Agent:
         self.isTime = isTime
         self.offPolicy = offPolicy
         self.Q_VAR_MULT = Q_VAR_MULT
+        self.HIST_HORIZON = HIST_HORIZON
         if not self.isDiscrete:
-            self.memory = ReplayMemory(10000)
+            self.memory = ReplayMemory(HIST_HORIZON)
             
             N_INPUT = self.N_obs + self.N_act
             N_HIDDEN = 50
             
             self.high = self.env.observation_space.high
             indices_high = np.where(self.high > 1e18)
-            self.high[indices_high] = 3
+            self.high[indices_high] = 1
             self.low = self.env.observation_space.low
             indices_low = np.where(self.low < -1e18)
-            self.low[indices_low] = -3
+            self.low[indices_low] = -1
             
             if self.continuousAction:
                 self.act_high = self.env.action_space.high
