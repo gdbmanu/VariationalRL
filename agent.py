@@ -34,7 +34,7 @@ class ReplayMemory(object):
 class Agent:
 
     def __init__(self, env, ALPHA=0.01, GAMMA=0.9, BETA = 1, PREC=1, isTime=False, do_reward = True,
-                 Q_VAR_MULT=30, offPolicy=False, optim='SGD', HIST_HORIZON=10000):
+                 Q_VAR_MULT=30, offPolicy=False, optim='SGD', HIST_HORIZON=10000, N_HIDDEN=50):
         #self.total_reward = 0.0
         self.env = env
         self.isDiscrete = type(env) is Environment or type(env) is gym.spaces.discrete.Discrete
@@ -54,7 +54,7 @@ class Agent:
             self.memory = ReplayMemory(HIST_HORIZON)
             
             N_INPUT = self.N_obs + self.N_act
-            N_HIDDEN = 50
+            self.N_HIDDEN = N_HIDDEN
             
             self.high = self.env.observation_space.high
             indices_high = np.where(self.high > 1e18)
@@ -68,33 +68,33 @@ class Agent:
                 self.act_low = self.env.action_space.low
             
             self.Q_KL_nn = nn.Sequential(
-                nn.Linear(N_INPUT, N_HIDDEN, bias=True),
+                nn.Linear(N_INPUT, self.N_HIDDEN, bias=True),
                 nn.ReLU(),
-                #nn.Linear(N_HIDDEN, N_HIDDEN, bias=True),
+                #nn.Linear(self.N_HIDDEN, self.N_HIDDEN, bias=True),
                 #nn.ReLU(),
-                nn.Linear(N_HIDDEN, 1, bias=True)
+                nn.Linear(self.N_HIDDEN, 1, bias=True)
             )
             if optim == 'Adam':
                 self.Q_KL_optimizer = torch.optim.Adam(self.Q_KL_nn.parameters(), lr = self.ALPHA) #!! *30 ?? TODO : à vérifier
             else:
                 self.Q_KL_optimizer = torch.optim.SGD(self.Q_KL_nn.parameters(), lr = self.ALPHA)
             self.Q_ref_nn = nn.Sequential(
-                nn.Linear(N_INPUT, N_HIDDEN, bias=True),
+                nn.Linear(N_INPUT, self.N_HIDDEN, bias=True),
                 nn.ReLU(),
-                #nn.Linear(N_HIDDEN, N_HIDDEN, bias=True),
+                #nn.Linear(self.N_HIDDEN, self.N_HIDDEN, bias=True),
                 #nn.ReLU(),
-                nn.Linear(N_HIDDEN, 1, bias=True)
+                nn.Linear(self.N_HIDDEN, 1, bias=True)
             )
             if optim == 'Adam':
                 self.Q_ref_optimizer = torch.optim.Adam(self.Q_ref_nn.parameters(), lr = self.ALPHA)
             else:
                 self.Q_ref_optimizer = torch.optim.SGD(self.Q_ref_nn.parameters(), lr = self.ALPHA)
             self.Q_var_nn = nn.Sequential(
-                nn.Linear(N_INPUT, N_HIDDEN, bias=True),
+                nn.Linear(N_INPUT, self.N_HIDDEN, bias=True),
                 nn.ReLU(),
-                #nn.Linear(N_HIDDEN, N_HIDDEN, bias=True),
+                #nn.Linear(self.N_HIDDEN, self.N_HIDDEN, bias=True),
                 #nn.ReLU(),
-                nn.Linear(N_HIDDEN, 1, bias=True)
+                nn.Linear(self.N_HIDDEN, 1, bias=True)
             )
             if optim == 'Adam':
                 self.Q_var_optimizer = torch.optim.Adam(self.Q_var_nn.parameters(), lr=self.ALPHA * Q_VAR_MULT )
@@ -146,19 +146,21 @@ class Agent:
         return out
 
     def tf_normalize(self, obs, show=False):
-        m = (self.high + self.low) / 2
+        return obs
+        '''m = (self.high + self.low) / 2
         diff = self.high - self.low
         if show:
             print("obs", obs)
             #print("m", m)
             #print("diff", diff)
             print("normalized", (obs - m) / diff)
-        return (obs - m) / diff
+        return (obs - m) / diff'''
     
     def tf_cat(self, obs, act):
-        obs = np.array(obs)
-        act = np.array(act)
+        obs = np.array(obs) / self.env.observation_space.shape[0]
+        act = np.array(act) / self.env.action_space.shape[0]
         if self.continuousAction:
+            # TEST-NORM act *= self.env.observation_space.shape[0] / self.env.action_space.shape[0]
             if act.ndim > 1:
                 return np.concatenate((obs, act), 1)
             else:
@@ -192,15 +194,21 @@ class Agent:
             if self.isDiscrete:
                 return self.Q_ref_tab[obs_or_time, act]
             else:
-                norm_obs_or_time = self.tf_normalize(obs_or_time, show=False)
-                input = self.tf_cat(norm_obs_or_time, act)
-                input_tf = torch.FloatTensor(input)
+                norm_obs_or_time = self.tf_normalize(obs_or_time)
+                if isinstance(act, list):
+                    inputs = []
+                    for a in act:
+                        cat_input = self.tf_cat(norm_obs_or_time, a)
+                        inputs.append([cat_input])                   
+                else:
+                    inputs = self.tf_cat(norm_obs_or_time, act)
+                inputs_tf = torch.FloatTensor(inputs)
                 if tf:
                     #print('input_tf.shape', input_tf.shape)
-                    return self.Q_ref_nn(input_tf)
+                    return self.Q_ref_nn(inputs_tf)
                 else:
                     with torch.no_grad():
-                        return self.Q_ref_nn(input_tf).data.numpy().squeeze() #[0]
+                        return self.Q_ref_nn(inputs_tf).data.numpy().squeeze() #[0]
 
     def Q_var(self, obs_or_time, act, tf=False):
         if self.isDiscrete:
