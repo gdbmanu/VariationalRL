@@ -33,7 +33,8 @@ class Trainer():
                  KL_reward=False,
                  ignore_pi=False,
                  augmentation=True,
-                 KNN_prob=False):
+                 KNN_prob=False,
+                 retain_present=False):
         self.agent = agent
         self.nb_trials = 0
         self.init_trial(update=False)
@@ -66,6 +67,7 @@ class Trainer():
         self.ignore_pi = ignore_pi
         self.augmentation = augmentation
         self.KNN_prob = KNN_prob
+        self.retain_present = retain_present
 
     def init_trial(self, update=True):
         if update:
@@ -480,14 +482,21 @@ class Trainer():
                             # detailed explanation). This converts batch-array of Transitions
                             # to Transition of batch-arrays.
                             batch = Transition(*zip(*transitions))
-                            obs_batch = batch.obs #torch.cat(batch.obs)
-                            act_batch = batch.action #torch.cat(batch.action)
-                            sum_future_KL_batch = torch.cat(batch.sum_future_KL)
+                            obs_batch = np.array(batch.obs) #torch.cat(batch.obs)                            
+                            act_batch = np.array(batch.action) #torch.cat(batch.action)                            
+                            sum_future_KL_batch = torch.cat(batch.sum_future_KL)                            
                             R_tilde_batch = torch.cat(batch.R_tilde)
                             if self.agent.do_reward:                            
                                 sum_future_rewards_batch = torch.cat(batch.sum_future_rewards)
                             else:
                                 sum_future_rewards_batch = torch.zeros((BATCH_SIZE, 1))
+                                
+                            if self.retain_present :
+                                obs_batch[0] = past_obs
+                                act_batch[0] = past_action
+                                sum_future_KL_batch[0] = torch.FloatTensor([sum_future_KL])
+                                sum_future_rewards_batch[0] = torch.FloatTensor([sum_future_rewards])
+                                
                             if self.Q_learning:
                                 Q_ref_pred_tf = self.agent.Q_ref(obs_batch,
                                                              act_batch,
@@ -750,7 +759,8 @@ class Q_learning_trainer(Trainer):
                  monte_carlo=False,
                  KL_reward=False,
                  augmentation=False,
-                 KNN_prob=False):
+                 KNN_prob=False,
+                 retain_present=False):
         super().__init__(agent,
                          EPSILON=EPSILON,
                          OBS_LEAK=OBS_LEAK,
@@ -761,7 +771,8 @@ class Q_learning_trainer(Trainer):
                          Q_learning=True,
                          KL_reward=KL_reward,
                          augmentation=augmentation,
-                         KNN_prob=KNN_prob)
+                         KNN_prob=KNN_prob,
+                         retain_present=retain_present)
 
 
 class KL_Q_learning_trainer(Trainer):
@@ -775,7 +786,8 @@ class KL_Q_learning_trainer(Trainer):
                  monte_carlo=False,
                  KL_reward=True,
                  augmentation=True,
-                 KNN_prob=False):
+                 KNN_prob=False,
+                 retain_present=False):
         super().__init__(agent,
                          EPSILON=EPSILON,
                          OBS_LEAK=OBS_LEAK,
@@ -786,7 +798,8 @@ class KL_Q_learning_trainer(Trainer):
                          Q_learning=True,
                          KL_reward=KL_reward,
                          augmentation=augmentation,
-                         KNN_prob=KNN_prob)
+                         KNN_prob=KNN_prob,
+                         retain_present=retain_present)
 
 
 class One_step_variational_trainer(Trainer):
@@ -802,7 +815,8 @@ class One_step_variational_trainer(Trainer):
                  KL_reward=False,
                  ignore_pi = False,
                  augmentation=True,
-                 KNN_prob=False):
+                 KNN_prob=False,
+                 retain_present=False):
         super().__init__(agent,
                          EPSILON=EPSILON,
                          OBS_LEAK=OBS_LEAK,
@@ -814,7 +828,8 @@ class One_step_variational_trainer(Trainer):
                          KL_reward=KL_reward,
                          ignore_pi=ignore_pi,
                          augmentation=augmentation,
-                         KNN_prob=KNN_prob)
+                         KNN_prob=KNN_prob,
+                         retain_present=retain_present)
 
     # agent.Q_var update # DEPRECATED ??
     def KL_diff(self, past_obs, a, new_obs, done=False, past_time=None):
@@ -837,7 +852,8 @@ class Final_variational_trainer(Trainer):
                  KL_reward=False,
                  ignore_pi = False,
                  augmentation=True,
-                 KNN_prob=False):
+                 KNN_prob=False,
+                 retain_present=False):
         super().__init__(agent,
                          EPSILON=EPSILON,
                          OBS_LEAK=OBS_LEAK,
@@ -849,7 +865,8 @@ class Final_variational_trainer(Trainer):
                          KL_reward=KL_reward,
                          ignore_pi=ignore_pi,
                          augmentation=augmentation,
-                         KNN_prob=KNN_prob)
+                         KNN_prob=KNN_prob,
+                         retain_present=retain_present)
 
     # agent.Q_var update
     def KL_diff(self, past_obs, a, final_obs, done=False, past_time=None):
