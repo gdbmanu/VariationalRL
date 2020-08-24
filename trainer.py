@@ -88,7 +88,12 @@ class Trainer():
         else:
             b_inf = min(self.HIST_HORIZON, len(self.mem_obs))
             if self.KNN_prob and self.nb_trials>10:
-                return KNN_prob(np.array(self.mem_obs[-b_inf:]), k=10)
+                if b_inf <= 10000:
+                    return KNN_prob(np.array(self.mem_obs[-b_inf:]), k=10)
+                else:
+                    transitions = agent.memory.sample(10000)
+                    batch = Transition(*zip(*transitions))
+                    return KNN_prob(batch.obs, k=10)
             else:
                 mu = np.mean(self.mem_obs[-b_inf:], axis = 0)
                 #print('mu', mu)
@@ -426,6 +431,7 @@ class Trainer():
             liste_KL = np.zeros(final_time)
 
             # FIRST LOOP
+
             if not self.Q_learning:
                 for time in range(final_time):
                     new_obs = self.trajectory[time + 1]
