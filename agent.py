@@ -42,8 +42,8 @@ class Net(nn.Module):
     
     def __init__(self, N_INPUT, N_HIDDEN, act_renorm=False):
         super(Net, self).__init__()
-        self.fc1 = nn.Linear(N_INPUT, N_HIDDEN)
-        self.fc2 = nn.Linear(N_HIDDEN, 1)
+        self.fc_in = nn.Linear(N_INPUT, N_HIDDEN)
+        self.fc_out = nn.Linear(N_HIDDEN, 1)
         self.act_renorm = act_renorm   
         
     #def tf_cat(self, obs, act):
@@ -62,8 +62,8 @@ class Net(nn.Module):
         
     def forward(self, obs, act):
         x = torch.cat((obs, act), 1) #self.tf_cat(obs, act)
-        x = F.relu(self.fc1(x))
-        return self.fc2(x)
+        x = F.relu(self.fc_in(x))
+        return self.fc_out(x)
         
     
 class V_net(nn.Module):
@@ -168,6 +168,8 @@ class Agent:
                 self.Q_var_nn = Net(N_INPUT, self.N_HIDDEN, act_renorm=self.act_renorm)
             else:
                 self.Q_var_nn = V_net(self.N_obs, self.N_act, self.N_HIDDEN)   
+            for d in agent.Q_var_nn.fc_out.parameters():
+                d.data *= 1/self.BETA
             if optim == 'Adam':
                 self.Q_var_optimizer = torch.optim.Adam(self.Q_var_nn.parameters(), lr=self.ALPHA * Q_VAR_MULT )
             else:

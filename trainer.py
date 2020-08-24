@@ -81,19 +81,18 @@ class Trainer():
         self.reward_history = []
         self.rtg_history = []
 
-    def calc_state_probs(self):
+    def calc_state_probs(self, MAX_SAMPLE = 10000):
         # return self.nb_visits/np.sum(self.nb_visits)
         if self.agent.isDiscrete:
             return self.obs_score / np.sum(self.obs_score)
         else:
             b_inf = min(self.HIST_HORIZON, len(self.mem_obs))
             if self.KNN_prob and self.nb_trials>10:
-                if b_inf <= 10000:
+                if b_inf <= MAX_SAMPLE:
                     return KNN_prob(np.array(self.mem_obs[-b_inf:]), k=10)
                 else:
-                    transitions = agent.memory.sample(10000)
-                    batch = Transition(*zip(*transitions))
-                    return KNN_prob(batch.obs, k=10)
+                    obs_batch, _, _, _ = self.memory_sample(MAX_SAMPLE)
+                    return KNN_prob(obs_batch, k=10)
             else:
                 mu = np.mean(self.mem_obs[-b_inf:], axis = 0)
                 #print('mu', mu)
@@ -501,16 +500,15 @@ class Trainer():
                     else:                        
                         BATCH_SIZE = 20
                         if len(self.agent.memory) > BATCH_SIZE:
-                            obs_batch, act_batch, sum_future_KL_batch, sum_future_rewards_batch = self.memory_sample(BATCH_SIZE)
-                                                        
-                            Q_ref_pred_tf = self.agent.Q_ref(obs_batch,
+                            obs_batch, act_batch, sum_future_KL_batch, sum_future_rewards_batch = self.memory_sample(BATCH_SIZE)                            
+                            if self.Q_learning:
+                                Q_ref_pred_tf = self.agent.Q_ref(obs_batch,
                                                          act_batch,
                                                          tf=True)
-                            loss_Q_ref = torch.sum(0.5 * torch.pow(Q_ref_pred_tf - sum_future_rewards_batch, 2))
-                            self.agent.Q_ref_optimizer.zero_grad()
-                            loss_Q_ref.backward()
-                            self.agent.Q_ref_optimizer.step()
-                            if self.Q_learning:
+                                loss_Q_ref = torch.sum(0.5 * torch.pow(Q_ref_pred_tf - sum_future_rewards_batch, 2))
+                                self.agent.Q_ref_optimizer.zero_grad()
+                                loss_Q_ref.backward()
+                                self.agent.Q_ref_optimizer.step()
                                 self.agent.Q_var = self.agent.Q_ref
                             else:
                                 Q_var_pred_tf = self.agent.Q_var(obs_batch,
