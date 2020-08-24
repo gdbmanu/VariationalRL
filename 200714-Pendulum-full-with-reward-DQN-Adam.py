@@ -95,9 +95,6 @@ if not os.path.isfile(data_path):
 
                 data = np.array((mem_obs_final, mem_total_reward, mem_pred_reward, mem_pred_var))
                 np.save(data_path, data)
+
 else:
-    data = np.load(data_path)
-    mem_obs_final = data[0]
-    mem_total_reward = data[1]
-
-
+    print('file', data_path, 'already exists!')

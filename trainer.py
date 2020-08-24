@@ -81,7 +81,7 @@ class Trainer():
         self.reward_history = []
         self.rtg_history = []
 
-    def calc_state_probs(self, MAX_SAMPLE = 10000):
+    def calc_state_probs(self, MAX_SAMPLE = 100000):
         # return self.nb_visits/np.sum(self.nb_visits)
         if self.agent.isDiscrete:
             return self.obs_score / np.sum(self.obs_score)

@@ -1,9 +1,8 @@
 import gym
 import roboschool
 from environment import Environment
-from agent import Agent
+from agent import Agent, Transition
 from trainer import Final_variational_trainer, Q_learning_trainer
-import matplotlib.pyplot as plt
 import numpy as np
 import math
 
@@ -21,7 +20,7 @@ from datetime import date
 args = EasyDict()
 args.ENV_NAME = 'BipedalWalker-v2'
 
-env = gym.make(ENV_NAME)
+env = gym.make(args.ENV_NAME)
 
 # Trainer
 
@@ -42,7 +41,7 @@ args.PREC = 1
 args.GAMMA=0.99 ######## !!!!!!!! ########
 args.Q_VAR_MULT = 30
 args.do_reward = True
-args.HIST_HORIZON = 200 * int(1/OBS_LEAK)
+args.HIST_HORIZON = 200 * int(1/args.OBS_LEAK)
 args.N_HIDDEN = 300
 args.optim = 'Adam'
 args.ALPHA = ALPHA_REF / args.Q_VAR_MULT / args.PREC 
@@ -51,7 +50,7 @@ args.retain_present = True
 
 # Data path
 
-data_path = "data/{}/{}-{}".format(ENV_NAME, str(date.today()), ENV_NAME)
+data_path = "data/{}/{}-{}".format(args.ENV_NAME, str(date.today()), args.ENV_NAME)
 if not args.final:
     data_path += '-full'
 else:
@@ -108,26 +107,30 @@ num_steps = 0
 step_max = 1e6
 if not os.path.isfile(data_path_npy):
     while num_steps < step_max:
+        print('***' + str(trainer.nb_trials) + '***')
+        print('BETA: ', args.BETA, ', PREC :', args.PREC, ', ALPHA:', ALPHA_REF, ', LEAK:', args.OBS_LEAK)
         trainer.run_episode()
-        if trainer.nb_trials%10 ==0:
-            print('***' + str(trainer.nb_trials) + '***')
-            #print("Trajectory: ", trainer.trajectory)
-            print("  Total reward got: %.4f" % trainer.total_reward)
-            print("  #time steps : %d" % len(trainer.trajectory))
-            print('  mean rtg:', np.mean(trainer.rtg_history))
+        num_steps += agent.get_time()
+        #print("Trajectory: ", trainer.trajectory)
+        print("  total reward got: %.4f" % trainer.total_reward)
+        print('  mean rtg:', np.mean(trainer.rtg_history))
+        print('  total num_steps :' + str(num_steps))
+        print("  #time steps : %d" % len(trainer.trajectory))
+        if True : #trainer.nb_trials%10 ==0:
     
-            transitions = agent.memory.sample(2000)
+            transitions = agent.memory.sample(20)
             batch = Transition(*zip(*transitions))
-            obs_sample = np.array(batch.obs)
-            act_sample = np.array(batch.action)
+            obs_sample = batch.obs
+            act_sample = batch.action
 
-            data = np.array((trainer.mem_total_reward, 
-                             trainer.mem_t_final,
-                             trainer.mem_mean_rtg,
-                             obs_sample,
-                             act_sample
-                             ))
+            data_tuple = (trainer.mem_total_reward, 
+                          trainer.mem_t_final,
+                          trainer.mem_mean_rtg)
+            sample_tuple = ( 
+                          obs_sample,
+                          act_sample
+                          )
+            data = np.array((data_tuple, sample_tuple))
             np.save(data_path+'.npy', data)
             
             torch.save(agent.Q_var_nn, data_path_Q_var)
-        num_steps += agent.get_time()

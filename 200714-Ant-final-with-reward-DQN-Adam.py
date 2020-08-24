@@ -25,7 +25,7 @@ import time
 import os
 
 data_path = '200714-Ant-final-with-reward-DQN-Adam.npy'
-BETA_range = [0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500]
+BETA_range = [5, 10, 20, 50, 100, 200, 500]
 PREC_range = [1e-5, 3e-5, 1e-4, 3e-4, 1e-3, 3e-3, 1e-2, 3e-2, 1e-1, 3e-1]
 
 if not os.path.isfile(data_path):

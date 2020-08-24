@@ -168,7 +168,7 @@ class Agent:
                 self.Q_var_nn = Net(N_INPUT, self.N_HIDDEN, act_renorm=self.act_renorm)
             else:
                 self.Q_var_nn = V_net(self.N_obs, self.N_act, self.N_HIDDEN)   
-            for d in agent.Q_var_nn.fc_out.parameters():
+            for d in self.Q_var_nn.fc_out.parameters():
                 d.data *= 1/self.BETA
             if optim == 'Adam':
                 self.Q_var_optimizer = torch.optim.Adam(self.Q_var_nn.parameters(), lr=self.ALPHA * Q_VAR_MULT )
