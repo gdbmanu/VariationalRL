@@ -8,6 +8,9 @@ import torch.nn.functional as F
 from collections import namedtuple
 
 
+OnlineTransition = namedtuple('OnlineTransition',
+                        ('past_obs', 'past_action', 'reward', 'next_obs', 'done'))
+
 Transition = namedtuple('Transition',
                         ('obs', 'action', 'sum_future_KL', 'sum_future_rewards', 'R_tilde'))
 
@@ -395,8 +398,8 @@ class Agent:
                 act_probs[act] = 1 / N_act
         return act_probs
 
-    def softmax_choice(self, obs, actions_set=None):
-        act_probs = self.softmax(obs, actions_set=actions_set)
+    def softmax_choice(self, obs, Q=None, actions_set=None):
+        act_probs = self.softmax(obs, Q=Q, actions_set=actions_set)
         if actions_set is None:
             action = np.random.choice(self.N_act, p=act_probs)
         else:
@@ -425,7 +428,7 @@ class Agent:
         else:
             return np.dot(act_probs, next_values)
 
-    def step(self, actions_set=None):
+    def step(self, actions_set=None, test=False):
         if self.isTime:
             curr_obs_or_time = self.get_time()
         else:
@@ -433,7 +436,10 @@ class Agent:
         if self.offPolicy:
             action = self.epsilon_greedy_choice(curr_obs_or_time, actions_set=actions_set)
         else:
-            action = self.softmax_choice(curr_obs_or_time, actions_set=actions_set)
+            if not test:
+                action = self.softmax_choice(curr_obs_or_time, Q=self.Q_var, actions_set=actions_set)
+            else:
+                action = self.softmax_choice(curr_obs_or_time, Q=self.Q_ref, actions_set=actions_set)
         new_obs, reward, done, _ = self.env.step(action)
         self.observation = new_obs
         self.time += 1
