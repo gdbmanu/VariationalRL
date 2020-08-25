@@ -34,7 +34,8 @@ class Trainer():
                  ignore_pi=False,
                  augmentation=True,
                  KNN_prob=False,
-                 retain_present=False):
+                 retain_present=False,
+                 retain_trajectory=False):
         self.agent = agent
         self.nb_trials = 0
         self.init_trial(update=False)
@@ -70,6 +71,7 @@ class Trainer():
         self.augmentation = augmentation
         self.KNN_prob = KNN_prob
         self.retain_present = retain_present
+        self.retain_trajectory = retain_trajectory
 
     def init_trial(self, update=True):
         if update:
@@ -334,18 +336,13 @@ class Trainer():
         obs_batch = np.array(batch.obs) #torch.cat(batch.obs)                            
         act_batch = np.array(batch.action) #torch.cat(batch.action)                            
         sum_future_KL_batch = torch.cat(batch.sum_future_KL)                            
-        R_tilde_batch = torch.cat(batch.R_tilde)
+        #R_tilde_batch = torch.cat(batch.R_tilde)
         if self.agent.do_reward:                            
             sum_future_rewards_batch = torch.cat(batch.sum_future_rewards)
         else:
             sum_future_rewards_batch = torch.zeros((BATCH_SIZE, 1))
 
-        if self.retain_present :
-            obs_batch[0] = past_obs
-            act_batch[0] = past_action
-            sum_future_KL_batch[0] = torch.FloatTensor([sum_future_KL])
-            if self.agent.do_reward:  
-                sum_future_rewards_batch[0] = torch.FloatTensor([sum_future_rewards])
+        
         return obs_batch, act_batch, sum_future_KL_batch, sum_future_rewards_batch
 
 
@@ -428,18 +425,36 @@ class Trainer():
         if done:
             final_time = self.agent.get_time()
             liste_KL = np.zeros(final_time)
-
-            # FIRST LOOP
-
+            liste_sum_KL = np.zeros(final_time)
+            liste_rtg = np.zeros(final_time)
+            
             if not self.Q_learning:
+                # FIRST LOOP
                 for time in range(final_time):
                     new_obs = self.trajectory[time + 1]
                     test_done = final_time == time + 1
                     liste_KL[time] = self.KL(new_obs, done=test_done)
-
-            # SECOND LOOP
-            for time in range(final_time):
-                ## !!!! faux dans le cas "full KL" et "full reward" !!!! TODO ##
+                # SECOND LOOP
+                for time in range(final_time):
+                    if self.final:
+                        liste_sum_KL[time] = np.sum(np.array(liste_KL[time:]))
+                    else:
+                        liste_sum_KL[time]  = np.sum(np.array(liste_KL[time:]) * \
+                                           self.agent.GAMMA **(np.arange(time, final_time) - time))
+                    #Q_var_pred = self.agent.Q_var(past_obs_or_time, past_action)
+                    #if self.nb_trials > 20:
+                    #    R_tilde = Q_var_pred - 1/ self.agent.BETA * sum_future_KL
+                    #else:
+                    #    R_tilde = - 1/ self.agent.BETA * sum_future_KL    
+                    
+            if self.agent.do_reward:
+                for time in range(final_time):
+                    liste_rtg[time] = np.sum(np.array(self.reward_history[time:]) * \
+                                          self.agent.GAMMA **(np.arange(time, final_time) - time))
+                    self.rtg_history.append(liste_rtg[time])
+                    
+            # THIRD LOOP
+            for time in range(final_time):                ## !!!! faux dans le cas "full KL" et "full reward" !!!! TODO ##
                 past_obs = self.trajectory[time]
                 if self.agent.isTime:
                     past_obs_or_time = time
@@ -447,42 +462,15 @@ class Trainer():
                     past_obs_or_time = self.trajectory[time]
                 past_action = self.action_history[time]
                 #actions_set = self.actions_set_history[time]
+                sum_future_KL = liste_sum_KL[time]
+                sum_future_rewards = liste_rtg[time]
 
-                sum_future_rewards = np.sum(np.array(self.reward_history[time:]) * \
-                                   self.agent.GAMMA **(np.arange(time, final_time) - time))
-                
-                self.rtg_history.append(sum_future_rewards)
-
-                #if time == 0:
-                #    sum_future_rewards_list = [sum_future_rewards]
-                #else:
-                #    sum_future_rewards_list.append(sum_future_rewards)
-
-                if not self.Q_learning:
-                    if self.final:
-                        sum_future_KL = np.sum(np.array(liste_KL[time:]))
-                    else:
-                        sum_future_KL = np.sum(np.array(liste_KL[time:]) * \
-                                           self.agent.GAMMA **(np.arange(time, final_time) - time))
-                    Q_var_pred = self.agent.Q_var(past_obs_or_time, past_action)
-                    if self.nb_trials > 20:
-                        R_tilde = Q_var_pred - 1/ self.agent.BETA * sum_future_KL
-                    else:
-                        R_tilde = - 1/ self.agent.BETA * sum_future_KL
-                else:
-                    sum_future_KL = 0
-                    R_tilde = 0
-
-                #if time == 0:
-                #    sum_future_KL_list = [sum_future_KL]
-                #else:
-                #    sum_future_KL_list.append(sum_future_KL)'''
                 if not self.agent.isDiscrete:
                     self.agent.memory.push(past_obs, 
                                            past_action, 
                                            torch.FloatTensor([sum_future_KL]), 
                                            torch.FloatTensor([sum_future_rewards]),
-                                           torch.FloatTensor([R_tilde])
+                                           0
                                           )
 
 
@@ -492,7 +480,7 @@ class Trainer():
                         self.agent.Q_ref_tab[past_obs_or_time, past_action] -= self.agent.ALPHA * TD_err_ref
 
                         TD_err_var = self.calc_TD_err_var(sum_future_rewards,
-                                                          sum_future_KL, #np.sum(liste_KL[time:]),
+                                                          sum_future_KL, 
                                                           past_obs,
                                                           past_obs_or_time,
                                                           past_action)
@@ -501,6 +489,24 @@ class Trainer():
                         BATCH_SIZE = 20
                         if len(self.agent.memory) > BATCH_SIZE:
                             obs_batch, act_batch, sum_future_KL_batch, sum_future_rewards_batch = self.memory_sample(BATCH_SIZE)                            
+                            
+                            if self.retain_present :
+                                obs_batch[0] = past_obs
+                                act_batch[0] = past_action
+                                if not self.Q_learning:
+                                    sum_future_KL_batch[0] = torch.FloatTensor([sum_future_KL])
+                                if self.agent.do_reward:  
+                                    sum_future_rewards_batch[0] = torch.FloatTensor([sum_future_rewards])
+                                    
+                            if self.retain_trajectory:
+                                num_sample = np.random.randint(final_time)
+                                obs_batch[1] = self.trajectory[num_sample]
+                                act_batch[1] = self.action_history[num_sample]
+                                if not self.Q_learning:
+                                    sum_future_KL_batch[1] = torch.FloatTensor([liste_sum_KL[num_sample]])
+                                if self.agent.do_reward:  
+                                    sum_future_rewards_batch[1] = torch.FloatTensor([liste_rtg[num_sample]])                            
+                            
                             if self.Q_learning:
                                 Q_ref_pred_tf = self.agent.Q_ref(obs_batch,
                                                          act_batch,
@@ -771,7 +777,8 @@ class Q_learning_trainer(Trainer):
                  KL_reward=False,
                  augmentation=False,
                  KNN_prob=False,
-                 retain_present=False):
+                 retain_present=False,
+                 retain_trajectory=False):
         super().__init__(agent,
                          EPSILON=EPSILON,
                          OBS_LEAK=OBS_LEAK,
@@ -783,7 +790,8 @@ class Q_learning_trainer(Trainer):
                          KL_reward=KL_reward,
                          augmentation=augmentation,
                          KNN_prob=KNN_prob,
-                         retain_present=retain_present)
+                         retain_present=retain_present,
+                         retain_trajectory=retain_trajectory)
 
 
 class KL_Q_learning_trainer(Trainer):
@@ -798,7 +806,8 @@ class KL_Q_learning_trainer(Trainer):
                  KL_reward=True,
                  augmentation=True,
                  KNN_prob=False,
-                 retain_present=False):
+                 retain_present=False,
+                 retain_trajectory=False):
         super().__init__(agent,
                          EPSILON=EPSILON,
                          OBS_LEAK=OBS_LEAK,
@@ -810,7 +819,8 @@ class KL_Q_learning_trainer(Trainer):
                          KL_reward=KL_reward,
                          augmentation=augmentation,
                          KNN_prob=KNN_prob,
-                         retain_present=retain_present)
+                         retain_present=retain_present,
+                         retain_trajectory=retain_trajectory)
 
 
 class One_step_variational_trainer(Trainer):
@@ -827,7 +837,8 @@ class One_step_variational_trainer(Trainer):
                  ignore_pi = False,
                  augmentation=True,
                  KNN_prob=False,
-                 retain_present=False):
+                 retain_present=False,
+                 retain_trajectory=False):
         super().__init__(agent,
                          EPSILON=EPSILON,
                          OBS_LEAK=OBS_LEAK,
@@ -840,7 +851,8 @@ class One_step_variational_trainer(Trainer):
                          ignore_pi=ignore_pi,
                          augmentation=augmentation,
                          KNN_prob=KNN_prob,
-                         retain_present=retain_present)
+                         retain_present=retain_present,
+                         retain_trajectory=retain_trajectory)
 
     # agent.Q_var update # DEPRECATED ??
     def KL_diff(self, past_obs, a, new_obs, done=False, past_time=None):
@@ -864,7 +876,8 @@ class Final_variational_trainer(Trainer):
                  ignore_pi = False,
                  augmentation=True,
                  KNN_prob=False,
-                 retain_present=False):
+                 retain_present=False,
+                 retain_trajectory=False):
         super().__init__(agent,
                          EPSILON=EPSILON,
                          OBS_LEAK=OBS_LEAK,
@@ -877,7 +890,8 @@ class Final_variational_trainer(Trainer):
                          ignore_pi=ignore_pi,
                          augmentation=augmentation,
                          KNN_prob=KNN_prob,
-                         retain_present=retain_present)
+                         retain_present=retain_present,
+                         retain_trajectory=retain_trajectory)
 
     # agent.Q_var update
     def KL_diff(self, past_obs, a, final_obs, done=False, past_time=None):
