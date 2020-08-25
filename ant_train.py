@@ -18,7 +18,7 @@ from datetime import date
 # Environment
 
 args = EasyDict()
-args.ENV_NAME = 'BipedalWalker-v2'
+args.ENV_NAME = 'RoboschoolAnt-v1'
 
 env = gym.make(args.ENV_NAME)
 
@@ -27,7 +27,7 @@ env = gym.make(args.ENV_NAME)
 args.monte_carlo=True
 args.augmentation = True
 args.final = False 
-args.OBS_LEAK = 1e-3 
+args.OBS_LEAK = 1e-4 
 args.N_PART = 1000
 args.KNN_prob=True
 
@@ -37,7 +37,7 @@ args.isTime=False
 args.offPolicy = False
 ALPHA_REF = 1e-4
 args.BETA = 100 
-args.PREC = 30 
+args.PREC = 3
 args.GAMMA=0.99 ######## !!!!!!!! ########
 args.Q_VAR_MULT = 30
 args.do_reward = True
@@ -108,7 +108,7 @@ step_max = 1e6
 if not os.path.isfile(data_path_npy):
     while num_steps < step_max:
         print('***' + str(trainer.nb_trials) + '***')
-        print('BETA: ', args.BETA, ', PREC :', args.PREC, ', ALPHA:', ALPHA_REF, ', LEAK:', args.OBS_LEAK)
+        print('**Ant** BETA: ', args.BETA, ', PREC :', args.PREC, ', ALPHA:', ALPHA_REF, ', LEAK:', args.OBS_LEAK)
         trainer.run_episode()
         num_steps += agent.get_time()
         #print("Trajectory: ", trainer.trajectory)
@@ -134,6 +134,3 @@ if not os.path.isfile(data_path_npy):
             np.save(data_path+'.npy', data)
             
             torch.save(agent.Q_var_nn, data_path_Q_var)
-else:
-    data = np.load(data_path_npy)
-    print(data[0][0][:400])
