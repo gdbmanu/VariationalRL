@@ -82,20 +82,22 @@ class Trainer():
         self.actions_set_history = []
         self.reward_history = []
         self.rtg_history = []
+        self.ktg_history = []
 
     def calc_state_probs(self, MAX_SAMPLE = 100000):
         # return self.nb_visits/np.sum(self.nb_visits)
         if self.agent.isDiscrete:
             return self.obs_score / np.sum(self.obs_score)
-        else:
-            b_inf = min(self.HIST_HORIZON, len(self.mem_obs))
+        else:            
             if self.KNN_prob and self.nb_trials>10:
-                if b_inf <= MAX_SAMPLE:
-                    return KNN_prob(np.array(self.mem_obs[-b_inf:]), k=10)
-                else:
-                    obs_batch, _, _, _ = self.memory_sample(MAX_SAMPLE)
-                    return KNN_prob(obs_batch, k=10)
+                b_inf = min(MAX_SAMPLE, len(self.agent.memory))
+                #if b_inf <= MAX_SAMPLE:
+                #    return KNN_prob(np.array(self.mem_obs[-b_inf:]), k=10)
+                #else:
+                obs_batch, _, _, _ = self.memory_sample(b_inf)
+                return KNN_prob(obs_batch, k=10)
             else:
+                b_inf = min(self.HIST_HORIZON, len(self.mem_obs))
                 mu = np.mean(self.mem_obs[-b_inf:], axis = 0)
                 #print('mu', mu)
                 #eps = 1e-5
@@ -109,7 +111,7 @@ class Trainer():
                     rv = multivariate_normal(mu, var)
                 except:
                     rv = multivariate_normal(mu, np.ones(len(mu)))
-                return rv.pdf # !! TODO a verifier  
+                return rv.pdf  
         
         
     def calc_final_state_probs(self):
@@ -424,9 +426,9 @@ class Trainer():
     def monte_carlo_update(self, done):
         if done:
             final_time = self.agent.get_time()
-            liste_KL = np.zeros(final_time)
+            liste_KL = np.zeros(final_time+1)
             liste_sum_KL = np.zeros(final_time)
-            liste_rtg = np.zeros(final_time)
+            liste_rtg = np.zeros(final_time+1)
             
             if not self.Q_learning:
                 # FIRST LOOP
@@ -434,13 +436,16 @@ class Trainer():
                     new_obs = self.trajectory[time + 1]
                     test_done = final_time == time + 1
                     liste_KL[time] = self.KL(new_obs, done=test_done)
+                if not self.final:
+                    liste_KL[final_time] = self.calc_sum_future_KL(new_obs, new_obs, False)
                 # SECOND LOOP
                 for time in range(final_time):
                     if self.final:
                         liste_sum_KL[time] = np.sum(np.array(liste_KL[time:]))
                     else:
                         liste_sum_KL[time]  = np.sum(np.array(liste_KL[time:]) * \
-                                           self.agent.GAMMA **(np.arange(time, final_time) - time))
+                                           self.agent.GAMMA **(np.arange(time, final_time+1) - time))
+                    self.ktg_history.append(liste_sum_KL[time])
                     #Q_var_pred = self.agent.Q_var(past_obs_or_time, past_action)
                     #if self.nb_trials > 20:
                     #    R_tilde = Q_var_pred - 1/ self.agent.BETA * sum_future_KL
@@ -507,14 +512,23 @@ class Trainer():
                                 if self.agent.do_reward:  
                                     sum_future_rewards_batch[1] = torch.FloatTensor([liste_rtg[num_sample]])                            
                             
-                            if self.Q_learning:
-                                Q_ref_pred_tf = self.agent.Q_ref(obs_batch,
+                            Q_KL_pred_tf = self.agent.Q_KL(obs_batch,
                                                          act_batch,
                                                          tf=True)
-                                loss_Q_ref = torch.sum(0.5 * torch.pow(Q_ref_pred_tf - sum_future_rewards_batch, 2))
-                                self.agent.Q_ref_optimizer.zero_grad()
-                                loss_Q_ref.backward()
-                                self.agent.Q_ref_optimizer.step()
+                            loss_Q_KL = torch.sum(0.5 *  torch.pow(Q_KL_pred_tf - sum_future_KL_batch, 2))
+                            self.agent.Q_KL_optimizer.zero_grad()
+                            loss_Q_KL.backward()
+                            self.agent.Q_KL_optimizer.step()
+                            
+                            Q_ref_pred_tf = self.agent.Q_ref(obs_batch,
+                                                         act_batch,
+                                                         tf=True)
+                            loss_Q_ref = torch.sum(0.5 * self.agent.PREC * torch.pow(Q_ref_pred_tf - sum_future_rewards_batch, 2))
+                            self.agent.Q_ref_optimizer.zero_grad()
+                            loss_Q_ref.backward()
+                            self.agent.Q_ref_optimizer.step()
+                            
+                            if self.Q_learning:    
                                 self.agent.Q_var = self.agent.Q_ref
                             else:
                                 Q_var_pred_tf = self.agent.Q_var(obs_batch,
@@ -524,7 +538,6 @@ class Trainer():
                                 R_tilde_batch = Q_var_pred_tf.detach() - 1/ self.agent.BETA * sum_future_KL_batch
                                 loss_Q_var = torch.sum(
                                       0.5 * self.agent.PREC *  torch.pow(Q_var_pred_tf - sum_future_rewards_batch, 2) 
-                                      # !! TEST !!
                                       + 0.5 * torch.pow(Q_var_pred_tf - R_tilde_batch, 2)
                                                       )
                                 self.agent.Q_var_optimizer.zero_grad()
