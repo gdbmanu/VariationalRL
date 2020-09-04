@@ -35,7 +35,10 @@ class Trainer():
                  augmentation=True,
                  KNN_prob=False,
                  retain_present=False,
-                 retain_trajectory=False):
+                 retain_trajectory=False,
+                 KL_correction=False,
+                 BATCH_SIZE=20,
+                 clip_gradients=False):
         self.agent = agent
         self.nb_trials = 0
         self.init_trial(update=False)
@@ -72,6 +75,9 @@ class Trainer():
         self.KNN_prob = KNN_prob
         self.retain_present = retain_present
         self.retain_trajectory = retain_trajectory
+        self.KL_correction = KL_correction
+        self.BATCH_SIZE=BATCH_SIZE
+        self.clip_gradients = clip_gradients
 
     def init_trial(self, update=True):
         if update:
@@ -106,10 +112,13 @@ class Trainer():
                 #try:
                 #    rv = multivariate_normal(mu, Sigma)
                 #except:
-                try:
-                    var = np.var(self.mem_obs[-b_inf:], axis=0)
-                    rv = multivariate_normal(mu, var)
-                except:
+                if self.agent.env.observation_space.shape[0] < 5:
+                    try:
+                        var = np.var(self.mem_obs[-b_inf:], axis=0)
+                        rv = multivariate_normal(mu, var)
+                    except:
+                        rv = multivariate_normal(mu, np.ones(len(mu)))
+                else:
                     rv = multivariate_normal(mu, np.ones(len(mu)))
                 return rv.pdf  
         
@@ -329,8 +338,8 @@ class Trainer():
             #return 0.5 * self.agent.PREC * torch.pow(sum_future_rewards_tf - Q_var_pred_tf, 2) + 1 / self.agent.BETA * KL_pred_tf
             return 0.5 * self.agent.PREC * torch.pow(Q_var_pred_tf - sum_future_rewards_tf + 1 / self.agent.BETA / self.agent.PREC * KL_pred_tf, 2)
 
-    def memory_sample(self, BATCH_SIZE):
-        transitions = self.agent.memory.sample(BATCH_SIZE)
+    def memory_sample(self, batch_size):
+        transitions = self.agent.memory.sample(batch_size)
         # Transpose the batch (see https://stackoverflow.com/a/19343/3343043 for
         # detailed explanation). This converts batch-array of Transitions
         # to Transition of batch-arrays.
@@ -342,7 +351,7 @@ class Trainer():
         if self.agent.do_reward:                            
             sum_future_rewards_batch = torch.cat(batch.sum_future_rewards)
         else:
-            sum_future_rewards_batch = torch.zeros((BATCH_SIZE, 1))
+            sum_future_rewards_batch = torch.zeros((batch_size, 1))
 
         
         return obs_batch, act_batch, sum_future_KL_batch, sum_future_rewards_batch
@@ -387,7 +396,8 @@ class Trainer():
                 KL_pred_tf = self.agent.Q_KL(past_obs, past_action, tf=True)
                 loss_KL = self.KL_loss_tf(KL_pred_tf, obs, done, actions_set=future_actions_set)
                 loss_KL.backward()
-                
+                for param in self.agent.Q_KL_optimizer.parameters():
+                    param.grad.data.clamp_(-1, 1)
                 self.agent.Q_KL_optimizer.step()
                 if self.agent.get_time() == 1:
                     toc = time.clock()
@@ -399,6 +409,8 @@ class Trainer():
                 Q_ref_pred_tf = self.agent.Q_ref(past_obs, past_action, tf=True)
                 loss_Q_ref = self.Q_ref_loss_tf(Q_ref_pred_tf, obs, reward, done, actions_set=future_actions_set)
                 loss_Q_ref.backward()
+                for param in self.agent.Q_ref_optimizer.parameters():
+                    param.grad.data.clamp_(-1, 1)
                 self.agent.Q_ref_optimizer.step()
                 if self.agent.get_time() == 1:
                     toc = time.clock()
@@ -412,6 +424,8 @@ class Trainer():
                 KL_pred_tf -= torch.FloatTensor([self.KL(past_obs, done=done)])
                 loss_Q_var = self.Q_var_loss_tf(Q_var_pred_tf, KL_pred_tf, obs, reward, done)
                 loss_Q_var.backward()
+                for param in self.agent.Q_var_optimizer.parameters():
+                    param.grad.data.clamp_(-1, 1)
                 self.agent.Q_var_optimizer.step()
                 if self.agent.get_time() == 1:
                     toc = time.clock()
@@ -436,11 +450,11 @@ class Trainer():
                     new_obs = self.trajectory[time + 1]
                     test_done = final_time == time + 1
                     liste_KL[time] = self.KL(new_obs, done=test_done)
-                if not self.final:
+                if self.KL_correction:
                     liste_KL[final_time] = self.calc_sum_future_KL(new_obs, new_obs, False)
                 # SECOND LOOP
                 for time in range(final_time):
-                    if self.final:
+                    if False: #self.final:
                         liste_sum_KL[time] = np.sum(np.array(liste_KL[time:]))
                     else:
                         liste_sum_KL[time]  = np.sum(np.array(liste_KL[time:]) * \
@@ -453,6 +467,14 @@ class Trainer():
                     #    R_tilde = - 1/ self.agent.BETA * sum_future_KL    
                     
             if self.agent.do_reward:
+                ## !!TEST!!
+                if False:
+                    if final_time == 1600:
+                        print('OK')
+                        self.reward_history[final_time-1]=self.calc_sum_future_rewards(self.reward_history[final_time-1], 
+                                                                                     new_obs, 
+                                                                                     False)
+                    
                 for time in range(final_time):
                     liste_rtg[time] = np.sum(np.array(self.reward_history[time:]) * \
                                           self.agent.GAMMA **(np.arange(time, final_time) - time))
@@ -491,9 +513,8 @@ class Trainer():
                                                           past_action)
                         self.agent.Q_var_tab[past_obs_or_time, past_action] -= self.agent.ALPHA * TD_err_var
                     else:                        
-                        BATCH_SIZE = 20
-                        if len(self.agent.memory) > BATCH_SIZE:
-                            obs_batch, act_batch, sum_future_KL_batch, sum_future_rewards_batch = self.memory_sample(BATCH_SIZE)                            
+                        if len(self.agent.memory) > self.BATCH_SIZE:
+                            obs_batch, act_batch, sum_future_KL_batch, sum_future_rewards_batch = self.memory_sample(self.BATCH_SIZE)                            
                             
                             if self.retain_present :
                                 obs_batch[0] = past_obs
@@ -518,6 +539,9 @@ class Trainer():
                             loss_Q_KL = torch.sum(0.5 *  torch.pow(Q_KL_pred_tf - sum_future_KL_batch, 2))
                             self.agent.Q_KL_optimizer.zero_grad()
                             loss_Q_KL.backward()
+                            if self.clip_gradients:
+                                for param in self.agent.Q_KL_nn.parameters():
+                                    param.grad.data.clamp_(-1, 1)
                             self.agent.Q_KL_optimizer.step()
                             
                             Q_ref_pred_tf = self.agent.Q_ref(obs_batch,
@@ -526,6 +550,9 @@ class Trainer():
                             loss_Q_ref = torch.sum(0.5 * self.agent.PREC * torch.pow(Q_ref_pred_tf - sum_future_rewards_batch, 2))
                             self.agent.Q_ref_optimizer.zero_grad()
                             loss_Q_ref.backward()
+                            if self.clip_gradients:
+                                for param in self.agent.Q_ref_nn.parameters():
+                                    param.grad.data.clamp_(-1, 1)
                             self.agent.Q_ref_optimizer.step()
                             
                             if self.Q_learning:    
@@ -542,6 +569,10 @@ class Trainer():
                                                       )
                                 self.agent.Q_var_optimizer.zero_grad()
                                 loss_Q_var.backward()
+                                # TODO : à tester
+                                if self.clip_gradients:
+                                    for param in self.agent.Q_var_nn.parameters():
+                                        param.grad.data.clamp_(-1, 1)
                                 self.agent.Q_var_optimizer.step() 
                     #print('')
                     #print(time) 
@@ -791,7 +822,10 @@ class Q_learning_trainer(Trainer):
                  augmentation=False,
                  KNN_prob=False,
                  retain_present=False,
-                 retain_trajectory=False):
+                 retain_trajectory=False,
+                 KL_correction=False,
+                 BATCH_SIZE=20,
+                 clip_gradients=False):
         super().__init__(agent,
                          EPSILON=EPSILON,
                          OBS_LEAK=OBS_LEAK,
@@ -804,7 +838,10 @@ class Q_learning_trainer(Trainer):
                          augmentation=augmentation,
                          KNN_prob=KNN_prob,
                          retain_present=retain_present,
-                         retain_trajectory=retain_trajectory)
+                         retain_trajectory=retain_trajectory,
+                         KL_correction=KL_correction,
+                         BATCH_SIZE=BATCH_SIZE,
+                         clip_gradients=clip_gradients)
 
 
 class KL_Q_learning_trainer(Trainer):
@@ -820,7 +857,10 @@ class KL_Q_learning_trainer(Trainer):
                  augmentation=True,
                  KNN_prob=False,
                  retain_present=False,
-                 retain_trajectory=False):
+                 retain_trajectory=False,
+                 KL_correction=False,
+                 BATCH_SIZE=20,
+                 clip_gradients=False):
         super().__init__(agent,
                          EPSILON=EPSILON,
                          OBS_LEAK=OBS_LEAK,
@@ -833,7 +873,10 @@ class KL_Q_learning_trainer(Trainer):
                          augmentation=augmentation,
                          KNN_prob=KNN_prob,
                          retain_present=retain_present,
-                         retain_trajectory=retain_trajectory)
+                         retain_trajectory=retain_trajectory,
+                         KL_correction=KL_correction,
+                         BATCH_SIZE=BATCH_SIZE,
+                         clip_gradients=clip_gradients)
 
 
 class One_step_variational_trainer(Trainer):
@@ -851,7 +894,10 @@ class One_step_variational_trainer(Trainer):
                  augmentation=True,
                  KNN_prob=False,
                  retain_present=False,
-                 retain_trajectory=False):
+                 retain_trajectory=False,
+                 KL_correction=False,
+                 BATCH_SIZE=20,
+                 clip_gradients=False):
         super().__init__(agent,
                          EPSILON=EPSILON,
                          OBS_LEAK=OBS_LEAK,
@@ -865,7 +911,10 @@ class One_step_variational_trainer(Trainer):
                          augmentation=augmentation,
                          KNN_prob=KNN_prob,
                          retain_present=retain_present,
-                         retain_trajectory=retain_trajectory)
+                         retain_trajectory=retain_trajectory,
+                         KL_correction=KL_correction,
+                         BATCH_SIZE=BATCH_SIZE,
+                         clip_gradients=clip_gradients)
 
     # agent.Q_var update # DEPRECATED ??
     def KL_diff(self, past_obs, a, new_obs, done=False, past_time=None):
@@ -890,7 +939,10 @@ class Final_variational_trainer(Trainer):
                  augmentation=True,
                  KNN_prob=False,
                  retain_present=False,
-                 retain_trajectory=False):
+                 retain_trajectory=False,
+                 KL_correction=False,
+                 BATCH_SIZE=20,
+                 clip_gradients=False):
         super().__init__(agent,
                          EPSILON=EPSILON,
                          OBS_LEAK=OBS_LEAK,
@@ -904,7 +956,10 @@ class Final_variational_trainer(Trainer):
                          augmentation=augmentation,
                          KNN_prob=KNN_prob,
                          retain_present=retain_present,
-                         retain_trajectory=retain_trajectory)
+                         retain_trajectory=retain_trajectory,
+                         KL_correction=KL_correction,
+                         BATCH_SIZE=BATCH_SIZE,
+                         clip_gradients=clip_gradients)
 
     # agent.Q_var update
     def KL_diff(self, past_obs, a, final_obs, done=False, past_time=None):

@@ -151,8 +151,11 @@ class Agent:
                 self.Q_ref_nn = Net(N_INPUT, self.N_HIDDEN, act_renorm=self.act_renorm)
             else:
                 self.Q_ref_nn = V_net(self.N_obs, self.N_act, self.N_HIDDEN)   
+            for d in self.Q_ref_nn.fc_out.parameters():
+                d.data *= 1/self.BETA
             if optim == 'Adam':
                 self.Q_ref_optimizer = torch.optim.Adam(self.Q_ref_nn.parameters(), lr = self.ALPHA)
+                                                                                                     # TODO: à tester 
             else:
                 self.Q_ref_optimizer = torch.optim.SGD(self.Q_ref_nn.parameters(), lr = self.ALPHA)
             
