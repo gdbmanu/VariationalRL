@@ -3,6 +3,7 @@ from scipy.stats import multivariate_normal
 from scipy.special import gamma
 from environment import Environment
 from agent import Transition
+from sklearn.neighbors import KernelDensity
 
 import torch
 import time
@@ -37,6 +38,7 @@ class Trainer():
                  retain_present=False,
                  retain_trajectory=False,
                  KL_correction=False,
+                 Q_ref_correction=False,
                  BATCH_SIZE=20,
                  clip_gradients=False):
         self.agent = agent
@@ -76,6 +78,7 @@ class Trainer():
         self.retain_present = retain_present
         self.retain_trajectory = retain_trajectory
         self.KL_correction = KL_correction
+        self.Q_ref_correction = Q_ref_correction
         self.BATCH_SIZE=BATCH_SIZE
         self.clip_gradients = clip_gradients
 
@@ -94,17 +97,26 @@ class Trainer():
         # return self.nb_visits/np.sum(self.nb_visits)
         if self.agent.isDiscrete:
             return self.obs_score / np.sum(self.obs_score)
-        else:            
-            if self.KNN_prob and self.nb_trials>10:
-                b_inf = min(MAX_SAMPLE, len(self.agent.memory))
-                #if b_inf <= MAX_SAMPLE:
-                #    return KNN_prob(np.array(self.mem_obs[-b_inf:]), k=10)
-                #else:
+        else:
+            b_inf = min(MAX_SAMPLE, len(self.agent.memory))
+            #if b_inf <= MAX_SAMPLE:
+            #    return KNN_prob(np.array(self.mem_obs[-b_inf:]), k=10)
+            #else:
+            if b_inf>0:
                 obs_batch, _, _, _ = self.memory_sample(b_inf)
-                return KNN_prob(obs_batch, k=10)
             else:
-                b_inf = min(self.HIST_HORIZON, len(self.mem_obs))
-                mu = np.mean(self.mem_obs[-b_inf:], axis = 0)
+                obs_batch = self.mem_obs
+            if self.nb_trials>10 and self.KNN_prob:    
+                return KNN_prob(obs_batch, k=10)
+            #else:
+            #    print('OK')
+            #    kde = KernelDensity(kernel='gaussian', bandwidth=0.5).fit(obs_batch)
+            #    f = kde.score_samples
+            #    return lambda x:np.exp(f([x]))
+            else:
+                #b_inf = min(self.HIST_HORIZON, len(self.mem_obs))
+                #mu = np.mean(self.mem_obs[-b_inf:], axis = 0)
+                mu = np.mean(obs_batch, axis = 0)
                 #print('mu', mu)
                 #eps = 1e-5
                 #Sigma = (1-eps) * np.cov(np.array(self.mem_obs[-b_inf:]).T) + eps * np.diag(np.ones(self.agent.N_obs))
@@ -114,7 +126,7 @@ class Trainer():
                 #except:
                 if self.agent.env.observation_space.shape[0] < 5:
                     try:
-                        var = np.var(self.mem_obs[-b_inf:], axis=0)
+                        var = np.var(obs_batch[-b_inf:], axis=0)
                         rv = multivariate_normal(mu, var)
                     except:
                         rv = multivariate_normal(mu, np.ones(len(mu)))
@@ -295,7 +307,7 @@ class Trainer():
         return sum_future_rewards
     
     def calc_TD_err_ref(self, sum_future_rewards, past_obs_or_time, past_action):
-        return self.agent.Q_ref(past_obs_or_time, past_action) - sum_future_rewards
+        return self.agent.PREC * (self.agent.Q_ref(past_obs_or_time, past_action) - sum_future_rewards)
 
     def online_TD_err_ref(self, past_obs_or_time, past_action, obs_or_time, reward, done=False):
         sum_future_rewards = self.calc_sum_future_rewards(reward, obs_or_time, done)
@@ -468,7 +480,7 @@ class Trainer():
                     
             if self.agent.do_reward:
                 ## !!TEST!!
-                if False:
+                if self.Q_ref_correction :
                     if final_time == 1600:
                         print('OK')
                         self.reward_history[final_time-1]=self.calc_sum_future_rewards(self.reward_history[final_time-1], 
@@ -824,6 +836,7 @@ class Q_learning_trainer(Trainer):
                  retain_present=False,
                  retain_trajectory=False,
                  KL_correction=False,
+                 Q_ref_correction=False,
                  BATCH_SIZE=20,
                  clip_gradients=False):
         super().__init__(agent,
@@ -840,6 +853,7 @@ class Q_learning_trainer(Trainer):
                          retain_present=retain_present,
                          retain_trajectory=retain_trajectory,
                          KL_correction=KL_correction,
+                         Q_ref_correction=Q_ref_correction,
                          BATCH_SIZE=BATCH_SIZE,
                          clip_gradients=clip_gradients)
 
@@ -859,6 +873,7 @@ class KL_Q_learning_trainer(Trainer):
                  retain_present=False,
                  retain_trajectory=False,
                  KL_correction=False,
+                 Q_ref_correction=False,                 
                  BATCH_SIZE=20,
                  clip_gradients=False):
         super().__init__(agent,
@@ -875,6 +890,7 @@ class KL_Q_learning_trainer(Trainer):
                          retain_present=retain_present,
                          retain_trajectory=retain_trajectory,
                          KL_correction=KL_correction,
+                         Q_ref_correction=Q_ref_correction,
                          BATCH_SIZE=BATCH_SIZE,
                          clip_gradients=clip_gradients)
 
@@ -896,6 +912,7 @@ class One_step_variational_trainer(Trainer):
                  retain_present=False,
                  retain_trajectory=False,
                  KL_correction=False,
+                 Q_ref_correction=False,
                  BATCH_SIZE=20,
                  clip_gradients=False):
         super().__init__(agent,
@@ -913,6 +930,7 @@ class One_step_variational_trainer(Trainer):
                          retain_present=retain_present,
                          retain_trajectory=retain_trajectory,
                          KL_correction=KL_correction,
+                         Q_ref_correction=Q_ref_correction,
                          BATCH_SIZE=BATCH_SIZE,
                          clip_gradients=clip_gradients)
 
@@ -941,6 +959,7 @@ class Final_variational_trainer(Trainer):
                  retain_present=False,
                  retain_trajectory=False,
                  KL_correction=False,
+                 Q_ref_correction=False,
                  BATCH_SIZE=20,
                  clip_gradients=False):
         super().__init__(agent,
@@ -958,6 +977,7 @@ class Final_variational_trainer(Trainer):
                          retain_present=retain_present,
                          retain_trajectory=retain_trajectory,
                          KL_correction=KL_correction,
+                         Q_ref_correction=Q_ref_correction,
                          BATCH_SIZE=BATCH_SIZE,
                          clip_gradients=clip_gradients)
 
