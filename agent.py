@@ -45,21 +45,7 @@ class Net(nn.Module):
         self.fc_in = nn.Linear(N_INPUT, N_HIDDEN)
         self.fc_out = nn.Linear(N_HIDDEN, 1)
         self.act_renorm = act_renorm   
-        
-    #def tf_cat(self, obs, act):
-    #    obs = np.array(obs) 
-    #    act = np.array(act)
-    #    if self.act_renorm:
-    #        obs = obs / obs.shape[1] #eself.env.observation_space.shape[0]
-    #        act = act / act.shape[1] #self.env.action_space.shape[0]
-    #         
-    #    # TEST-NORM act *= self.env.observation_space.shape[0] / self.env.action_space.shape[0]
-    #    if act.ndim > 1:
-    #        return np.concatenate((obs, act), 1)
-    #    else:
-    #        return np.concatenate((obs, act))
-        
-        
+
     def forward(self, obs, act):
         x = torch.cat((obs, act), 1) #self.tf_cat(obs, act)
         x = F.relu(self.fc_in(x))
@@ -122,14 +108,7 @@ class Agent:
                 self.act_high = self.env.action_space.high
                 self.act_low = self.env.action_space.low
             
-              
-            #self.Q_KL_nn = nn.Sequential(
-            #    nn.Linear(N_INPUT, self.N_HIDDEN, bias=True),
-            #    nn.ReLU(),
-            #    #nn.Linear(self.N_HIDDEN, self.N_HIDDEN, bias=True),
-            #    #nn.ReLU(),
-            #    nn.Linear(self.N_HIDDEN, 1, bias=True)
-            #)
+
             if not do_V_net:
                 self.Q_KL_nn = Net(N_INPUT, self.N_HIDDEN, act_renorm=self.act_renorm)
             else:
@@ -139,14 +118,7 @@ class Agent:
             else:
                 self.Q_KL_optimizer = torch.optim.SGD(self.Q_KL_nn.parameters(), lr = self.ALPHA)
             
-             
-            #self.Q_ref_nn = nn.Sequential(
-            #    nn.Linear(N_INPUT, self.N_HIDDEN, bias=True),
-            #    nn.ReLU(),
-            #    #nn.Linear(self.N_HIDDEN, self.N_HIDDEN, bias=True),
-            #    #nn.ReLU(),
-            #    nn.Linear(self.N_HIDDEN, 1, bias=True)
-            #)
+
             if not do_V_net:
                 self.Q_ref_nn = Net(N_INPUT, self.N_HIDDEN, act_renorm=self.act_renorm)
             else:
@@ -158,15 +130,7 @@ class Agent:
                                                                                                      # TODO: à tester 
             else:
                 self.Q_ref_optimizer = torch.optim.SGD(self.Q_ref_nn.parameters(), lr = self.ALPHA)
-            
-            
-            #self.Q_var_nn = nn.Sequential(
-            #    nn.Linear(N_INPUT, self.N_HIDDEN, bias=True),
-            #    nn.ReLU(),
-            #    #nn.Linear(self.N_HIDDEN, self.N_HIDDEN, bias=True),
-            #    #nn.ReLU(),
-            #    nn.Linear(self.N_HIDDEN, 1, bias=True)
-            #)
+
             if not do_V_net:
                 self.Q_var_nn = Net(N_INPUT, self.N_HIDDEN, act_renorm=self.act_renorm)
             else:
