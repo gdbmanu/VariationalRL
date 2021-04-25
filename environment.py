@@ -1,21 +1,29 @@
 import random
+import numpy as np
 
 class Environment:
 
-    def __init__(self, direction, next, reward, initial_state_range=0, total_steps=10):
+    def __init__(self, direction, next, reward, initial_state_range=0, total_steps=10, initial_context=None, N_obs=None):
         self.direction = direction
         self.next = next
         self.reward = reward
-        self.N_obs = len(next)
+        if N_obs is not None:
+            self.N_obs = N_obs
+        else:
+            self.N_obs = len(next)
         self.N_act = len(direction)
         self.total_steps = total_steps
         self.initial_state_range = initial_state_range
+        self.initial_context = initial_context
         self.reset()
 
     def reset(self):
         self.state = random.randint(0, self.initial_state_range)
         self.time = 0
         self.steps_left = self.total_steps
+        if self.initial_context is not None:
+            self.context = self.initial_context.copy()
+        self.final_condition = False
         return self.state
 
     @classmethod
@@ -121,23 +129,84 @@ class Environment:
         print(reward)
 
         return cls(direction, next, reward, initial_state_range=initial_state_range, total_steps=2*(side-1))
+    
+    @classmethod
+    def salesman(cls, initial_state_range=0, total_steps=6):
+        direction = {
+            0:1,
+            1:2,
+            2:3,
+            3:4,
+            4:5,
+            5:6
+        }
+
+        '''next_dict = {0: {1:1, 2:2, 3:3, 4:4, 5:5, 6:6},
+                    1: {2:2, 3:3, 4:4, 5:5, 6:6},
+                    2: {1:1, 3:3, 4:4, 5:5, 6:6},
+                    3: {1:1, 2:2, 4:4, 5:5, 6:6},
+                    4: {1:1, 2:2, 3:3, 5:5, 6:6},
+                    5: {1:1, 2:2, 3:3, 4:4, 6:6},
+                    6: {1:1, 2:2, 3:3, 4:4, 5:5}
+            }'''
+        
+        def next(state, context, action):
+            past_state = state
+            if state != (action+1):
+                state = action + 1
+                context[action] = 0
+                # distance calculation
+                if past_state == 0:
+                    x_0 = 0
+                    y_0 = 0
+                else:
+                    theta_0 = (past_state - 1) * np.pi / 3
+                    x_0 = np.cos(theta_0)
+                    y_0 = np.sin(theta_0)
+                theta_1 = (state - 1) * np.pi / 3
+                x_1 = np.cos(theta_1)
+                y_1 = np.sin(theta_1)
+                dist = np.sqrt((x_0 - x_1)**2 + (y_0 - y_1)**2)
+                reward = -dist - 1
+            else:
+                reward = -1 # time malus
+            return state, reward, context           
+        
+        reward = None
+        
+        initial_context = [1, 1, 1, 1, 1, 1]
+        
+        return cls(direction, next, reward, 
+                   initial_state_range=initial_state_range, 
+                   total_steps=total_steps, 
+                   initial_context=initial_context,
+                   N_obs=7)
 
 
     def get_directions(self):
         return list(self.next[self.state].keys())
 
     def is_done(self):
-        return self.steps_left == 0
+        return self.steps_left == 0 or self.final_condition
 
     def step(self, action):
         if self.is_done():
             raise Exception("Game is over")
         self.steps_left -= 1
         self.time += 1
-        if self.direction[action] in self.get_directions():
-            self.state = self.next[self.state][self.direction[action]]
-            return self.state, self.reward[self.state], self.is_done(), None
+        if self.reward is None:
+            self.state, reward, self.context = self.next(self.state, self.context, action)
+            if sum(self.context) == 0:
+                self.final_condition = True
+            #else:
+            #    if self.is_done():
+            #        reward -= 3 * self.time
+            return self.state, reward, self.is_done(), None
         else:
-            return self.state, 0, self.is_done(), None
+            if self.direction[action] in self.get_directions():
+                self.state = self.next[self.state][self.direction[action]]
+                return self.state, self.reward[self.state], self.is_done(), None
+            else:
+                return self.state, 0, self.is_done(), None
 
 

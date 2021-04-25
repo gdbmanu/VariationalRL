@@ -40,7 +40,9 @@ class Trainer():
                  KL_correction=False,
                  Q_ref_correction=False,
                  BATCH_SIZE=20,
-                 clip_gradients=False):
+                 clip_gradients=False,
+                 KL_centering=True,
+                 rtg_centering=True):
         self.agent = agent
         self.nb_trials = 0
         self.init_trial(update=False)
@@ -81,6 +83,8 @@ class Trainer():
         self.Q_ref_correction = Q_ref_correction
         self.BATCH_SIZE=BATCH_SIZE
         self.clip_gradients = clip_gradients
+        self.KL_centering = KL_centering
+        self.rtg_centering = rtg_centering
 
     def init_trial(self, update=True):
         if update:
@@ -461,9 +465,9 @@ class Trainer():
                 for time in range(final_time):
                     new_obs = self.trajectory[time + 1]
                     test_done = final_time == time + 1
-                    liste_KL[time] = self.KL(new_obs, done=test_done)
+                    liste_KL[time] = self.KL(new_obs, done=test_done) 
                 if self.KL_correction:
-                    liste_KL[final_time] = self.calc_sum_future_KL(new_obs, new_obs, False)
+                    liste_KL[final_time] = self.calc_sum_future_KL(new_obs, new_obs, False) 
                 # SECOND LOOP
                 for time in range(final_time):
                     if False: #self.final:
@@ -493,6 +497,10 @@ class Trainer():
                     self.rtg_history.append(liste_rtg[time])
                     
             # THIRD LOOP
+            if self.KL_centering:
+                mean_KL_final = np.mean(self.mem_KL_final[-100:])
+            if self.rtg_centering:
+                mean_mean_rtg = np.mean(self.mem_mean_rtg[-100:])
             for time in range(final_time):                ## !!!! faux dans le cas "full KL" et "full reward" !!!! TODO ##
                 past_obs = self.trajectory[time]
                 if self.agent.isTime:
@@ -501,8 +509,13 @@ class Trainer():
                     past_obs_or_time = self.trajectory[time]
                 past_action = self.action_history[time]
                 #actions_set = self.actions_set_history[time]
-                sum_future_KL = liste_sum_KL[time]
-                sum_future_rewards = liste_rtg[time]
+                sum_future_KL = liste_sum_KL[time]  #
+                if self.KL_centering:
+                    sum_future_KL -= mean_KL_final
+                sum_future_rewards = liste_rtg[time] 
+                if self.rtg_centering:
+                    sum_future_rewards -= mean_mean_rtg
+                #print(np.mean(self.mem_KL_final) , sum_future_KL, sum_future_rewards)
 
                 if not self.agent.isDiscrete:
                     self.agent.memory.push(past_obs, 
@@ -519,7 +532,7 @@ class Trainer():
                         self.agent.Q_ref_tab[past_obs_or_time, past_action] -= self.agent.ALPHA * TD_err_ref
 
                         TD_err_var = self.calc_TD_err_var(sum_future_rewards,
-                                                          sum_future_KL, 
+                                                          sum_future_KL , 
                                                           past_obs,
                                                           past_obs_or_time,
                                                           past_action)
@@ -838,7 +851,9 @@ class Q_learning_trainer(Trainer):
                  KL_correction=False,
                  Q_ref_correction=False,
                  BATCH_SIZE=20,
-                 clip_gradients=False):
+                 clip_gradients=False,
+                 KL_centering=True,
+                 rtg_centering=True):
         super().__init__(agent,
                          EPSILON=EPSILON,
                          OBS_LEAK=OBS_LEAK,
@@ -855,7 +870,9 @@ class Q_learning_trainer(Trainer):
                          KL_correction=KL_correction,
                          Q_ref_correction=Q_ref_correction,
                          BATCH_SIZE=BATCH_SIZE,
-                         clip_gradients=clip_gradients)
+                         clip_gradients=clip_gradients,
+                         KL_centering=KL_centering,
+                         rtg_centering=rtg_centering)
 
 
 class KL_Q_learning_trainer(Trainer):
@@ -875,7 +892,9 @@ class KL_Q_learning_trainer(Trainer):
                  KL_correction=False,
                  Q_ref_correction=False,                 
                  BATCH_SIZE=20,
-                 clip_gradients=False):
+                 clip_gradients=False,
+                 KL_centering=True,
+                 rtg_centering=True):
         super().__init__(agent,
                          EPSILON=EPSILON,
                          OBS_LEAK=OBS_LEAK,
@@ -892,7 +911,9 @@ class KL_Q_learning_trainer(Trainer):
                          KL_correction=KL_correction,
                          Q_ref_correction=Q_ref_correction,
                          BATCH_SIZE=BATCH_SIZE,
-                         clip_gradients=clip_gradients)
+                         clip_gradients=clip_gradients,
+                         KL_centering=KL_centering,
+                         rtg_centering=rtg_centering)
 
 
 class One_step_variational_trainer(Trainer):
@@ -914,7 +935,9 @@ class One_step_variational_trainer(Trainer):
                  KL_correction=False,
                  Q_ref_correction=False,
                  BATCH_SIZE=20,
-                 clip_gradients=False):
+                 clip_gradients=False,
+                 KL_centering=True,
+                 rtg_centering=True):
         super().__init__(agent,
                          EPSILON=EPSILON,
                          OBS_LEAK=OBS_LEAK,
@@ -932,7 +955,9 @@ class One_step_variational_trainer(Trainer):
                          KL_correction=KL_correction,
                          Q_ref_correction=Q_ref_correction,
                          BATCH_SIZE=BATCH_SIZE,
-                         clip_gradients=clip_gradients)
+                         clip_gradients=clip_gradients,
+                         KL_centering=KL_centering,
+                         rtg_centering=rtg_centering)
 
     # agent.Q_var update # DEPRECATED ??
     def KL_diff(self, past_obs, a, new_obs, done=False, past_time=None):
@@ -961,7 +986,9 @@ class Final_variational_trainer(Trainer):
                  KL_correction=False,
                  Q_ref_correction=False,
                  BATCH_SIZE=20,
-                 clip_gradients=False):
+                 clip_gradients=False,
+                 KL_centering=True,
+                 rtg_centering=True):
         super().__init__(agent,
                          EPSILON=EPSILON,
                          OBS_LEAK=OBS_LEAK,
@@ -979,7 +1006,9 @@ class Final_variational_trainer(Trainer):
                          KL_correction=KL_correction,
                          Q_ref_correction=Q_ref_correction,
                          BATCH_SIZE=BATCH_SIZE,
-                         clip_gradients=clip_gradients)
+                         clip_gradients=clip_gradients,
+                         KL_centering=KL_centering,
+                         rtg_centering=rtg_centering)
 
     # agent.Q_var update
     def KL_diff(self, past_obs, a, final_obs, done=False, past_time=None):
