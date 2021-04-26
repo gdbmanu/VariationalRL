@@ -38,20 +38,32 @@ class Environment:
             raise Exception("Game is over")
         self.steps_left -= 1
         self.time += 1
-        if self.reward is None:
+        if type(self.next) is not dict:
+            # Salesman
             self.state, reward, self.context = self.next(self.state, self.context, action)
             if sum(self.context) == 0:
                 self.final_condition = True
-            #else:
-            #    if self.is_done():
-            #        reward -= 3 * self.time
             return self.state, reward, self.is_done(), None
         else:
+            # Others
             if self.direction[action] in self.get_directions():
-                self.state = self.next[self.state][self.direction[action]]
+                dir = self.next[self.state][self.direction[action]]
+                if type(dir) is tuple:
+                    self.state = np.random.choice(dir[0], p=dir[1])
+                else:
+                    self.state = dir
                 return self.state, self.reward[self.state], self.is_done(), None
             else:
                 return self.state, 0, self.is_done(), None
+
+    @classmethod
+    def volleyBall(cls, a, b, initial_state_range=0):
+        direction = [0, 1]
+        next = {
+            0: {0: ((0, 1), (1-a, a)), 1: ((0, 1), (1-b, b))}
+        }
+        reward = {0:0, 1:1}
+        return cls(direction, next, reward, initial_state_range=initial_state_range, total_steps=1)
 
     @classmethod
     def tp1(cls, initial_state_range=4):
