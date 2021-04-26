@@ -2,7 +2,6 @@ import numpy as np
 from scipy.stats import multivariate_normal
 from scipy.special import gamma
 from environment import Environment
-from agent import Transition
 from sklearn.neighbors import KernelDensity
 
 import torch
@@ -213,7 +212,7 @@ class Trainer():
             # THIRD LOOP
             if self.KL_centering:
                 mean_KL_final = np.mean(self.mem_KL_final[-100:])
-            if self.rtg_centering:
+            if self.agent.do_reward and self.rtg_centering:
                 mean_mean_rtg = np.mean(self.mem_mean_rtg[-100:])
             for time in range(final_time):                ## !!!! faux dans le cas "full KL" et "full reward" !!!! TODO ##
                 past_obs = self.trajectory[time]
@@ -226,7 +225,7 @@ class Trainer():
                 if self.KL_centering:
                     sum_future_KL -= mean_KL_final
                 sum_future_rewards = liste_rtg[time] 
-                if self.rtg_centering:
+                if self.agent.do_reward and self.rtg_centering:
                     sum_future_rewards -= mean_mean_rtg
 
                 if self.nb_trials > 10:

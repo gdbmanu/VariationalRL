@@ -26,6 +26,33 @@ class Environment:
         self.final_condition = False
         return self.state
 
+
+    def get_directions(self):
+        return list(self.next[self.state].keys())
+
+    def is_done(self):
+        return self.steps_left == 0 or self.final_condition
+
+    def step(self, action):
+        if self.is_done():
+            raise Exception("Game is over")
+        self.steps_left -= 1
+        self.time += 1
+        if self.reward is None:
+            self.state, reward, self.context = self.next(self.state, self.context, action)
+            if sum(self.context) == 0:
+                self.final_condition = True
+            #else:
+            #    if self.is_done():
+            #        reward -= 3 * self.time
+            return self.state, reward, self.is_done(), None
+        else:
+            if self.direction[action] in self.get_directions():
+                self.state = self.next[self.state][self.direction[action]]
+                return self.state, self.reward[self.state], self.is_done(), None
+            else:
+                return self.state, 0, self.is_done(), None
+
     @classmethod
     def tp1(cls, initial_state_range=4):
 
@@ -172,32 +199,5 @@ class Environment:
                    total_steps=total_steps, 
                    initial_context=initial_context,
                    N_obs=7)
-
-
-    def get_directions(self):
-        return list(self.next[self.state].keys())
-
-    def is_done(self):
-        return self.steps_left == 0 or self.final_condition
-
-    def step(self, action):
-        if self.is_done():
-            raise Exception("Game is over")
-        self.steps_left -= 1
-        self.time += 1
-        if self.reward is None:
-            self.state, reward, self.context = self.next(self.state, self.context, action)
-            if sum(self.context) == 0:
-                self.final_condition = True
-            #else:
-            #    if self.is_done():
-            #        reward -= 3 * self.time
-            return self.state, reward, self.is_done(), None
-        else:
-            if self.direction[action] in self.get_directions():
-                self.state = self.next[self.state][self.direction[action]]
-                return self.state, self.reward[self.state], self.is_done(), None
-            else:
-                return self.state, 0, self.is_done(), None
 
 
