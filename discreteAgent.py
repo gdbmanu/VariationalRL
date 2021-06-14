@@ -7,7 +7,7 @@ from environment import Environment
 class Agent:
 
     def __init__(self, env, ALPHA=0.01, GAMMA=0.9, BETA = 1, PREC=1, isTime=False, do_reward = True,
-                 Q_VAR_MULT=30, offPolicy=False, HIST_HORIZON=10000, act_renorm=True):
+                 Q_VAR_MULT=30, offPolicy=False, HIST_HORIZON=10000):
         self.env = env
         self.init_env()
         self.ALPHA = ALPHA
@@ -20,7 +20,6 @@ class Agent:
         self.offPolicy = offPolicy
         self.Q_VAR_MULT = Q_VAR_MULT
         self.HIST_HORIZON = HIST_HORIZON
-        self.act_renorm=act_renorm
         if self.isTime:
             self.Q_ref_tab = 1e-6 * np.random.uniform(size=(self.env.total_steps, self.N_act))  # target Q
             self.Q_var_tab = 1e-6 * np.random.uniform(size=(self.env.total_steps, self.N_act))  # variational Q
@@ -31,7 +30,7 @@ class Agent:
             self.Q_KL_tab = 1e-6 * np.random.uniform(size=(self.N_obs, self.N_act))
 
     @classmethod
-    def timeAgent(cls, env, ALPHA=0.1, GAMMA=0.9, BETA = 1, PREC=1, do_reward=False):
+    def timeAgent(cls, env, ALPHA=0.1, GAMMA=1, BETA = 1, PREC=1, do_reward=False):
         return cls(env, ALPHA=ALPHA, GAMMA=GAMMA, BETA=BETA, PREC=PREC, isTime=True, do_reward=do_reward)
 
     def init_env(self):
@@ -64,7 +63,10 @@ class Agent:
 
     def Q_ref(self, obs_or_time, act):
         if not self.do_reward:
-            return 0
+            try:
+                return np.zeros(len(act))
+            except:
+                return 0
         else:
             return self.Q_ref_tab[obs_or_time, act]
 
@@ -177,6 +179,9 @@ class Agent:
         new_obs, reward, done, _ = self.env.step(action)
         self.observation = new_obs
         self.time += 1
-        return curr_obs_or_time, action, new_obs, reward, done
+        if self.isTime:
+            return curr_obs_or_time, action, self.time, reward, done
+        else:
+            return curr_obs_or_time, action, new_obs, reward, done
 
 

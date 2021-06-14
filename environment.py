@@ -60,7 +60,8 @@ class Environment:
     def volleyBall(cls, a, b, initial_state_range=0):
         direction = [0, 1]
         next = {
-            0: {0: ((0, 1), (1-a, a)), 1: ((0, 1), (1-b, b))}
+            0: {0: ((0, 1), (1-a, a)), 1: ((0, 1), (1-b, b))},
+            1: {}
         }
         reward = {0:0, 1:1}
         return cls(direction, next, reward, initial_state_range=initial_state_range, total_steps=1)

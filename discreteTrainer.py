@@ -141,7 +141,6 @@ class Trainer():
         sum_future_rewards = self.calc_sum_future_rewards(reward, obs_or_time, done)
         return self.calc_TD_err_ref(sum_future_rewards, past_obs_or_time, past_action)
 
-
     def calc_TD_err_var(self, sum_future_rewards, sum_future_KL, past_obs, past_obs_or_time, past_action):
         if self.Q_learning:
             mult_Q = 0
@@ -152,7 +151,11 @@ class Trainer():
 
     def online_TD_err_var(self, past_obs, past_obs_or_time, past_action, obs, obs_or_time, reward, done=False):      
         sum_future_rewards = self.calc_sum_future_rewards(reward, obs_or_time, done)
+        if self.rtg_centering:
+            sum_future_rewards -= np.mean(self.agent.Q_ref_tab)
         sum_future_KL = self.agent.Q_KL(past_obs_or_time, past_action)
+        if self.KL_centering:
+            sum_future_KL -= np.mean(self.agent.Q_KL_tab)
         return self.calc_TD_err_var(sum_future_rewards, sum_future_KL, past_obs, past_obs_or_time, past_action)
 
 
@@ -169,7 +172,8 @@ class Trainer():
                                                                                           obs,
                                                                                           obs_or_time,
                                                                                           done=done)
-        self.agent.Q_ref_tab[past_obs_or_time, past_action] -= self.agent.ALPHA * self.online_TD_err_ref(past_obs_or_time,
+        if not self.agent.do_reward:
+            self.agent.Q_ref_tab[past_obs_or_time, past_action] -= self.agent.ALPHA * self.online_TD_err_ref(past_obs_or_time,
                                                                                               past_action,
                                                                                               obs_or_time,
                                                                                               reward,
