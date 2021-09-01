@@ -50,20 +50,28 @@ class Environment:
                 dir = self.next[self.state][self.direction[action]]
                 if type(dir) is tuple:
                     self.state = np.random.choice(dir[0], p=dir[1])
+                    try: 
+                        reward = self.reward[self.state]
+                    except:
+                        reward = self.reward[action, self.state]
                 else:
                     self.state = dir
-                return self.state, self.reward[self.state], self.is_done(), None
+                    reward = self.reward[self.state]
+                return self.state, reward, self.is_done(), None
             else:
                 return self.state, 0, self.is_done(), None
 
     @classmethod
-    def volleyBall(cls, a, b, initial_state_range=0):
+    def volleyBall(cls, a, b, initial_state_range=0, action_prior = None):
         direction = [0, 1]
         next = {
             0: {0: ((0, 1), (1-a, a)), 1: ((0, 1), (1-b, b))},
             1: {}
         }
-        reward = {0:0, 1:1}
+        if action_prior is not None:
+            reward = {(0,0):0, (1,0):action_prior, (0,1): 1, (1,1): 1+action_prior}
+        else:
+            reward = {0:0, 1:1}
         return cls(direction, next, reward, initial_state_range=initial_state_range, total_steps=1)
 
     @classmethod
