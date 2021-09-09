@@ -555,7 +555,7 @@ class E3D_Trainer:
         q2_pi = self.actor.q_prim(s, a)
         q_pi = self.softmin(q1_pi, q2_pi)
         # Entropy-regularized policy loss
-        loss_pi = (self.alpha * logp_a - self.beta * q_pi).mean()
+        loss_pi = (logp_a - self.beta * q_pi).mean()
         # Useful info for logging
         pi_info = dict(LogPi=logp_a.detach().numpy())
 
@@ -674,7 +674,7 @@ class E3D_Trainer:
                     self.logger.save_state({'env': self.env}, None)
 
                 # Test the performance of the deterministic version of the agent.
-                self.test_agent(deterministic=False)
+                self.test_agent()
 
                 # Log info about epoch
                 if self.t >= self.update_after:
@@ -705,7 +705,7 @@ ac_kwargs = dict(hidden_sizes=[64,64], activation=torch.nn.ReLU) #activation=nn.
 
 logger_kwargs = dict(output_dir=output_dir, exp_name=exp_name)
 
-trainer = SAC_Trainer(env_fn=env_fn, 
+trainer = E3D_Trainer(env_fn=env_fn, 
                        ac_kwargs=ac_kwargs, 
                        start_steps=start_steps, 
                        steps_per_epoch=steps_per_epoch, 
