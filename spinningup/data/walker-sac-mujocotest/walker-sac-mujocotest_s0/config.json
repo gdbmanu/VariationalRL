@@ -1,0 +1,40 @@
+{
+    "ac_kwargs":	{},
+    "actor_critic":	"MLPActorCritic",
+    "alpha":	0.003,
+    "batch_size":	100,
+    "env_fn":	"<function call_experiment.<locals>.thunk_plus.<locals>.<lambda> at 0x7fb7b2f2e730>",
+    "epochs":	100,
+    "exp_name":	"walker-sac-mujocotest",
+    "gamma":	0.99,
+    "logger":	{
+        "<spinup.utils.logx.EpochLogger object at 0x7fb7b2e6e4e0>":	{
+            "epoch_dict":	{},
+            "exp_name":	"walker-sac-mujocotest",
+            "first_row":	true,
+            "log_current_row":	{},
+            "log_headers":	[],
+            "output_dir":	"/home/dauce/Recherche/stages/Laurene Carminatti 2021/spinningup/data/walker-sac-mujocotest/walker-sac-mujocotest_s0",
+            "output_file":	{
+                "<_io.TextIOWrapper name='/home/dauce/Recherche/stages/Laurene Carminatti 2021/spinningup/data/walker-sac-mujocotest/walker-sac-mujocotest_s0/progress.txt' mode='w' encoding='UTF-8'>":	{
+                    "mode":	"w"
+                }
+            }
+        }
+    },
+    "logger_kwargs":	{
+        "exp_name":	"walker-sac-mujocotest",
+        "output_dir":	"/home/dauce/Recherche/stages/Laurene Carminatti 2021/spinningup/data/walker-sac-mujocotest/walker-sac-mujocotest_s0"
+    },
+    "lr":	0.001,
+    "max_ep_len":	1000,
+    "num_test_episodes":	10,
+    "polyak":	0.995,
+    "replay_size":	1000000,
+    "save_freq":	1,
+    "seed":	0,
+    "start_steps":	10000,
+    "steps_per_epoch":	4000,
+    "update_after":	1000,
+    "update_every":	50
+}

@@ -1,0 +1,48 @@
+{
+    "ac_kwargs":	{},
+    "actor_critic":	"MLPActorCritic",
+    "algo":	"macao",
+    "bandwidth":	0.1,
+    "batch_size":	100,
+    "beta":	10,
+    "do_reward":	true,
+    "env_fn":	"<function call_experiment.<locals>.thunk_plus.<locals>.<lambda> at 0x7f8b1af707b8>",
+    "epochs":	100,
+    "exp_name":	"macao-test",
+    "gamma":	0.99,
+    "logger_kwargs":	{
+        "exp_name":	"macao-test",
+        "output_dir":	"/home/dauce/Recherche/stages/Laurene Carminatti 2021/spinningup/data/macao-test/macao-test_s0"
+    },
+    "lr":	0.001,
+    "max_ep_len":	1000,
+    "num_test_episodes":	10,
+    "polyak":	0.995,
+    "prec":	0.3,
+    "replay_size":	1000000,
+    "save_freq":	1,
+    "seed":	0,
+    "self":	{
+        "<spinup.algos.pytorch.macao.macao.MaCAO_Trainer object at 0x7f8b1ae0ffd0>":	{
+            "logger":	{
+                "<spinup.utils.logx.EpochLogger object at 0x7f8b1af78470>":	{
+                    "epoch_dict":	{},
+                    "exp_name":	"macao-test",
+                    "first_row":	true,
+                    "log_current_row":	{},
+                    "log_headers":	[],
+                    "output_dir":	"/home/dauce/Recherche/stages/Laurene Carminatti 2021/spinningup/data/macao-test/macao-test_s0",
+                    "output_file":	{
+                        "<_io.TextIOWrapper name='/home/dauce/Recherche/stages/Laurene Carminatti 2021/spinningup/data/macao-test/macao-test_s0/progress.txt' mode='w' encoding='UTF-8'>":	{
+                            "mode":	"w"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "start_steps":	10000,
+    "steps_per_epoch":	4000,
+    "update_after":	1000,
+    "update_every":	50
+}
