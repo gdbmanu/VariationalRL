@@ -13,25 +13,29 @@ from spinup.utils.logx import EpochLogger
 from sklearn.neighbors import KernelDensity
 
 
+from scipy.special import softmax
+
 class ReplayBuffer:
     """
     A simple FIFO experience replay buffer for DDPG agents.
     """
 
     def __init__(self, obs_dim, act_dim, size):
-        self.obs_buf = np.zeros(core.combined_shape(size, obs_dim), dtype=np.float32)
-        self.obs2_buf = np.zeros(core.combined_shape(size, obs_dim), dtype=np.float32)
-        self.act_buf = np.zeros(core.combined_shape(size, act_dim), dtype=np.float32)
+        self.obs_buf = np.zeros(combined_shape(size, obs_dim), dtype=np.float32)
+        self.obs2_buf = np.zeros(combined_shape(size, obs_dim), dtype=np.float32)
+        self.act_buf = np.zeros(combined_shape(size, act_dim), dtype=np.float32)
         self.rew_buf = np.zeros(size, dtype=np.float32)
+        self.logp_buf = np.zeros(size, dtype=np.float32)
         self.done_buf = np.zeros(size, dtype=np.float32)
         self.ep_len_buf = np.zeros(size, dtype=np.float32)
         self.ptr, self.size, self.max_size = 0, 0, size
 
-    def store(self, obs, act, rew, next_obs, done, ep_len):
+    def store(self, obs, act, rew, logp, next_obs, done, ep_len):
         self.obs_buf[self.ptr] = obs
         self.obs2_buf[self.ptr] = next_obs
         self.act_buf[self.ptr] = act
         self.rew_buf[self.ptr] = rew
+        self.logp_buf[self.ptr] = logp
         self.done_buf[self.ptr] = done
         self.ep_len_buf[self.ptr] = ep_len
         self.ptr = (self.ptr+1) % self.max_size
@@ -43,11 +47,29 @@ class ReplayBuffer:
                      obs2=self.obs2_buf[idxs],
                      act=self.act_buf[idxs],
                      rew=self.rew_buf[idxs],
+                     logp=self.logp_buf[idxs],
                      done=self.done_buf[idxs],
                      ep_len=self.ep_len_buf[idxs])
         return {k: torch.as_tensor(v, dtype=torch.float32) for k,v in batch.items()}
     
-    def last_obs_2(self, batch_size=32, batch_interval=1000):
+    def importance_sample_batch(self, batch_size=32, sel_range=3):    
+        idxs_sel = np.random.randint(0, self.size, size=batch_size*sel_range)
+        logp_scores = self.logp_buf[idxs_sel].reshape(batch_size, sel_range)
+        idxs_sel = idxs_sel.reshape(batch_size, sel_range)
+        idxs = np.zeros(batch_size).astype('int')
+        for i_batch in range(batch_size):
+            i_softmax = np.random.choice(sel_range, 1, p=softmax(-logp_scores[i_batch,:]))[0]
+            idxs[i_batch] = idxs_sel[i_batch,i_softmax]
+        batch = dict(obs=self.obs_buf[idxs],
+                     obs2=self.obs2_buf[idxs],
+                     act=self.act_buf[idxs],
+                     rew=self.rew_buf[idxs],
+                     logp=self.logp_buf[idxs],
+                     done=self.done_buf[idxs],
+                     ep_len=self.ep_len_buf[idxs])
+        return {k: torch.as_tensor(v, dtype=torch.float32) for k,v in batch.items()}
+    
+    def last_batch(self, batch_size=32, batch_interval=1000):
         
         if self.size < batch_interval:
             batch_interval = self.size
@@ -55,24 +77,34 @@ class ReplayBuffer:
         
         if start>=0:
             path_slice = slice(start, self.ptr)
-            last_obs_2_interval = self.obs2_buf[path_slice]
+            batch = dict(obs=self.obs_buf[path_slice],
+                         obs2=self.obs2_buf[path_slice],
+                         act=self.act_buf[path_slice],
+                         rew=self.rew_buf[path_slice],
+                         logp=self.logp_buf[path_slice],
+                         done=self.done_buf[path_slice],
+                         ep_len=self.ep_len_buf[path_slice])
         else:
             slice_1 = slice(self.max_size+start, self.max_size)
             slice_2 = slice(0, self.ptr)
-            last_obs_2_interval = np.concatenate((self.obs2_buf[slice_1],self.obs2_buf[slice_2]))
-            
-        idxs = np.random.randint(0, batch_interval, size=batch_size)
-        last_obs_2_batch=last_obs_2_interval[idxs]
+            batch = dict(obs=np.concatenate((self.obs_buf[slice_1],self.obs_buf[slice_2])),
+                         obs2=np.concatenate((self.obs2_buf[slice_1],self.obs2_buf[slice_2])),
+                         act=np.concatenate((self.act_buf[slice_1],self.act_buf[slice_2])),
+                         rew=np.concatenate((self.rew_buf[slice_1],self.rew_buf[slice_2])),
+                         logp=np.concatenate((self.logp_buf[slice_1],self.logp_buf[slice_2])),
+                         done=np.concatenate((self.done_buf[slice_1],self.done_buf[slice_2])),
+                         ep_len=np.concatenate((self.ep_len_buf[slice_1],self.ep_len_buf[slice_2])))        
         
-        return torch.as_tensor(last_obs_2_batch, dtype=torch.float32) 
+        return {k: torch.as_tensor(v, dtype=torch.float32) for k,v in batch.items()}
+
     
 class MaCAO_Trainer:
     
-    def __init__(self, env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, 
+    def __init__(self, env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0, 
         steps_per_epoch=4000, epochs=100, replay_size=int(1e6), gamma=0.99, 
         polyak=0.995, lr=1e-3, beta=10, prec=0.3, batch_size=100, start_steps=10000, 
         update_after=1000, update_every=50, num_test_episodes=10, max_ep_len=1000, 
-        logger_kwargs=dict(), save_freq=1, do_reward=True, bandwidth=0.1, algo='macao'):
+        logger_kwargs=dict(), save_freq=1, bandwidth=0.1, do_reward=True, do_KL=True, algo='macao'):
         
         """
     Maximum Credit Assignment Occupancy (MaCAO)
@@ -210,8 +242,12 @@ class MaCAO_Trainer:
         self.batch_size = batch_size
         
         # List of parameters for both Q-networks (save this for convenience)
-        self.q_params = itertools.chain(self.actor.q.parameters(), self.actor.q_prim.parameters())
         
+        if self.algo == 'macao':        
+            self.q_params = itertools.chain(self.actor.q_1.parameters(), self.actor.q_2.parameters(), 
+                                        self.actor.q_var_1.parameters(), self.actor.q_var_2.parameters())
+        else:
+            self.q_params = itertools.chain(self.actor.q_1.parameters(), self.actor.q_2.parameters())  
         # Set up optimizers for policy and q-function
         self.pi_optimizer = Adam(self.actor.pi.parameters(), lr=self.lr)
         self.q_optimizer = Adam(self.q_params, lr=self.lr)
@@ -230,6 +266,7 @@ class MaCAO_Trainer:
         self.save_freq = save_freq
         
         self.do_reward = do_reward
+        self.do_KL = do_KL
         self.bandwidth=bandwidth
         self.algo=algo
     
@@ -249,8 +286,12 @@ class MaCAO_Trainer:
     def compute_loss_q(self, data):
         s, a, r, s_prim, done, ep_len = data['obs'], data['act'], data['rew'], data['obs2'], data['done'], data['ep_len']
        
-        q1 = self.actor.q(s,a) # to be updated
-        q2 = self.actor.q_prim(s,a) # to be updated
+        q_1 = self.actor.q_1(s,a) # to be updated
+        q_2 = self.actor.q_2(s,a) # to be updated
+        
+        if self.algo == 'macao':  
+            q_var_1 = self.actor.q_var_1(s,a) # to be updated
+            q_var_2 = self.actor.q_var_2(s,a) # to be updated
         
         # Bellman backup for Q function
         with torch.no_grad():
@@ -259,52 +300,62 @@ class MaCAO_Trainer:
             # logp_a_prim_c = logp_a_prim - torch.mean(logp_a_prim)
             
             # (uniform) KL drive
-            if self.algo == 'macao':               
+            if self.algo == 'macao':             
                 log_p_obs_np = self.state_probs.score_samples(s_prim.detach().numpy())
                 log_p_obs = torch.as_tensor(log_p_obs_np, dtype=torch.float32)
                 log_p_info = dict(LogPObs=log_p_obs.detach().numpy())
                 log_p_obs_c = log_p_obs - torch.mean(log_p_obs)
-                TD_err =  - (1 - self.gamma)/self.beta * log_p_obs_c
+                TD_err =  - int(self.do_KL) * (1 - self.gamma)/self.beta * log_p_obs_c
                 done_KL = torch.max(done, torch.as_tensor(ep_len == self.max_ep_len, dtype=torch.float32))
             else:
                 log_p_info = dict(LogPObs=None)
-            
-            # Target Q-value
-            if not self.do_reward:
-                r = 0
                 
-            # q_pi_targ = self.actor_targ.q(s_prim, a_prim)
             # Target Q-values
-            q1_pi_targ = self.actor_targ.q(s_prim, a_prim)
-            q2_pi_targ = self.actor_targ.q_prim(s_prim, a_prim)
-            q_pi_targ = self.softmin(q1_pi_targ, q2_pi_targ)
+            q1_targ = self.actor_targ.q_1(s_prim, a_prim)
+            q2_targ = self.actor_targ.q_2(s_prim, a_prim)
+            q_targ = self.softmin(q1_targ, q2_targ)
             
-            # mult = (1 - self.gamma) / (self.beta * self.prec)
-            if self.algo != 'sac':  
-                backup_ref =  r +  (1 - done) * self.gamma * q_pi_targ 
-                backup_KL_1  = self.actor.q(s,a) + (1 - done_KL) * TD_err 
-                backup_KL_2  = self.actor.q_prim(s,a) + (1 - done_KL) * TD_err 
+            if self.algo == 'macao':    
+                q1_var_targ = self.actor_targ.q_var_1(s_prim, a_prim)
+                q2_var_targ = self.actor_targ.q_var_2(s_prim, a_prim)
+                q_var_targ = self.softmin(q1_var_targ, q2_var_targ)
+               
+                pred_r1 = self.actor.q_1(s,a) - self.gamma * (1 - done) *  self.actor.q_1(s_prim,a_prim)
+                adv_1 = int(self.do_reward) * r -  pred_r1
+                backup_ref_1 = adv_1 +  self.gamma * (1 - done) *  q_targ 
+                pred_r2 = self.actor.q_2(s,a) - self.gamma * (1 - done) *  self.actor.q_2(s_prim,a_prim)
+                adv_2 = int(self.do_reward) * r -  pred_r2
+                backup_ref_2 = adv_2 +  self.gamma * (1 - done) *  q_targ               
+                
+                backup_PG_1 =  (1 - done_KL)/self.prec * TD_err + self.gamma * (1 - done) *  q_var_targ               
+                backup_PG_2 =  (1 - done_KL)/self.prec * TD_err + self.gamma * (1 - done) *  q_var_targ
             else:
-                # backup =  r + self.gamma * (1 - done) * (q_pi_targ - mult * logp_a_prim_c) # SAC update
-                backup =  r + self.gamma * (1 - done) * (q_pi_targ - 1 / self.beta * logp_a_prim) # SAC update           
+                backup =  int(self.do_reward) * r + self.gamma * (1 - done) * (q_targ - 1 / self.beta * logp_a_prim) # SAC update           
 
         # MSE loss against Bellman backup  
         if self.algo != 'sac':  
             if self.algo == 'baseline':
-                loss_q1 = 0.5 * self.prec * ((q1 - backup_ref)**2).mean() 
-                loss_q2 = 0.5 * self.prec * ((q2 - backup_ref)**2).mean() 
+                loss_q1 = 0.5  * ((q1 - backup_ref_1)**2).mean() 
+                loss_q2 = 0.5  * ((q2 - backup_ref_2)**2).mean() 
+                loss_q = loss_q1 + loss_q2
+                q_info = dict(Q1Vals=q_1.detach().numpy(),
+                          Q2Vals=q_2.detach().numpy())
             else:
-                loss_q1 = 0.5 * ((q1 - backup_KL_1)**2).mean() + 0.5 * self.prec * ((q1 - backup_ref)**2).mean() 
-                loss_q2 = 0.5 * ((q2 - backup_KL_2)**2).mean() + 0.5 * self.prec * ((q2 - backup_ref)**2).mean() 
+                loss_q1 = 0.5 * ((q_1 - backup_ref_1)**2).mean() 
+                loss_q2 = 0.5 * ((q_2 - backup_ref_2)**2).mean() 
+                loss_q1_var = 0.5 * ((q_var_1 - backup_PG_1)**2).mean() 
+                loss_q2_var = 0.5 * ((q_var_2 - backup_PG_2)**2).mean() 
+                loss_q = loss_q1 + loss_q2 + loss_q1_var + loss_q2_var 
+                q_info = dict(Q1Vals=q_1.detach().numpy(),
+                              Q2Vals=q_2.detach().numpy(),
+                              Q1Vals_var=q_var_1.detach().numpy(),
+                              Q2Vals_var=q_var_2.detach().numpy())
         else:
             loss_q1 = 0.5 * ((q1 - backup)**2).mean() 
             loss_q2 = 0.5 * ((q2 - backup)**2).mean() 
-            
-        loss_q = loss_q1 + loss_q2                
-
-        # Useful info for logging
-        q_info = dict(Q1Vals=q1.detach().numpy(),
-                      Q2Vals=q2.detach().numpy())
+            loss_q = loss_q1 + loss_q2
+            q_info = dict(Q1Vals=q_1.detach().numpy(),
+                          Q2Vals=q_2.detach().numpy())
         
         return loss_q, q_info, log_p_info
     
@@ -312,14 +363,20 @@ class MaCAO_Trainer:
     def compute_loss_pi(self, data):
         s = data['obs']
         a, logp_a = self.actor.pi(s)
-        q1_pi = self.actor.q(s, a)
-        q2_pi = self.actor.q_prim(s, a)
+        q1_pi = self.actor.q_1(s, a)
+        q2_pi = self.actor.q_2(s, a)
         q_pi = self.softmin(q1_pi, q2_pi)
-        # Entropy-regularized policy loss
-        loss_pi = (logp_a - self.beta * q_pi).mean()
+        if self.algo == 'macao':    
+            q1_var = self.actor.q_var_1(s, a)
+            q2_var = self.actor.q_var_2(s, a)
+            q_var = self.softmin(q1_var, q2_var)
+            # Entropy-regularized policy loss
+            loss_pi = (logp_a - self.beta * (q_pi + q_var)).mean()
+        else:
+            loss_pi = (logp_a - self.beta * q_pi).mean()
         # Useful info for logging
         pi_info = dict(LogPi=logp_a.detach().numpy())
-
+        
         return loss_pi, pi_info
 
     def update(self, data):
@@ -450,6 +507,9 @@ class MaCAO_Trainer:
                     self.logger.log_tabular('LogPObs', with_min_and_max=True)
                     self.logger.log_tabular('Q1Vals', with_min_and_max=True)
                     self.logger.log_tabular('Q2Vals', with_min_and_max=True)
+                    if self.algo == 'macao':
+                        self.logger.log_tabular('Q1Vals_var', with_min_and_max=True)
+                        self.logger.log_tabular('Q2Vals_var', with_min_and_max=True)
                     self.logger.log_tabular('LogPi', average_only=True)   
                     self.logger.log_tabular('LossPi', average_only=True)
                     self.logger.log_tabular('LossQ', average_only=True)
@@ -481,6 +541,7 @@ def macao(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(),
                        prec=prec,
                        replay_size = replay_size,
                        do_reward=do_reward,
+                       do_KL=do_KL,
                        batch_size=batch_size,
                        bandwidth=bandwidth,
                        algo=algo)
@@ -493,6 +554,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--algo', type=str, default='macao') # 'macao', 'sac', 'baseline'
     parser.add_argument('--do_reward', type=bool, default=True)
+    parser.add_argument('--do_KL', type=bool, default=True)
     parser.add_argument('--env', type=str, default='HalfCheetah-v2')
     parser.add_argument('--seed', '-s', type=int, default=0)
     parser.add_argument('--hid', type=int, default=256)
