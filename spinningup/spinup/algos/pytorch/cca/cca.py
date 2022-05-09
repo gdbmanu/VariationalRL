@@ -8,7 +8,7 @@ from torch.distributions.normal import Normal
 from torch.distributions import Categorical
 import gym
 import time
-import spinup.algos.pytorch.macao.core as core
+import spinup.algos.pytorch.cca.core as core
 from spinup.utils.logx import EpochLogger
 from sklearn.neighbors import KernelDensity
 
@@ -21,9 +21,9 @@ class ReplayBuffer:
     """
 
     def __init__(self, obs_dim, act_dim, size):
-        self.obs_buf = np.zeros(combined_shape(size, obs_dim), dtype=np.float32)
-        self.obs2_buf = np.zeros(combined_shape(size, obs_dim), dtype=np.float32)
-        self.act_buf = np.zeros(combined_shape(size, act_dim), dtype=np.float32)
+        self.obs_buf = np.zeros(core.combined_shape(size, obs_dim), dtype=np.float32)
+        self.obs2_buf = np.zeros(core.combined_shape(size, obs_dim), dtype=np.float32)
+        self.act_buf = np.zeros(core.combined_shape(size, act_dim), dtype=np.float32)
         self.rew_buf = np.zeros(size, dtype=np.float32)
         self.logp_buf = np.zeros(size, dtype=np.float32)
         self.done_buf = np.zeros(size, dtype=np.float32)
@@ -106,7 +106,7 @@ class ReplayBuffer:
     
 class CCA_Trainer:
     
-    def __init__(self, env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0, 
+    def __init__(self, env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, 
         steps_per_epoch=4000, epochs=100, replay_size=int(1e6), gamma=0.99, 
         polyak=0.995, lr=1e-3, beta=10, prec=0.3, batch_size=100, start_steps=10000, 
         update_after=1000, update_every=50, num_test_episodes=10, max_ep_len=1000, 
@@ -241,7 +241,7 @@ class CCA_Trainer:
         self.replay_buffer = ReplayBuffer(obs_dim=self.obs_dim, act_dim=self.act_dim, size=replay_size)
 
         # Count variables (protip: try to get a feel for how different size networks behave!)
-        var_counts = tuple(count_vars(module) for module in [self.actor.pi, self.actor.pi_test,
+        var_counts = tuple(core.count_vars(module) for module in [self.actor.pi, self.actor.pi_test,
                                                              self.actor.q_1, self.actor.q_2, 
                                                              self.actor.q_ref_1, self.actor.q_ref_2,
                                                              self.actor.q_KL_1, self.actor.q_KL_2])
@@ -277,13 +277,12 @@ class CCA_Trainer:
         self.algo=algo
         
     
-    INV_TMP_SOFTMIN = 1
     def softmin(self, q1, q2):
         q_cat = torch.cat((q1.unsqueeze(1), 
                            q2.unsqueeze(1)), 
                            dim=1)
         with torch.no_grad():
-            p_q = F.softmin(INV_TMP_SOFTMIN * q_cat, dim=1) 
+            p_q = F.softmin(q_cat, dim=1) 
             #p_q = torch.clamp(p_q, 0, 1)           
             i_q = Categorical(p_q).sample().detach().numpy()
             idx = np.array((np.arange(self.batch_size), i_q))
@@ -298,11 +297,11 @@ class CCA_Trainer:
         q_2 = self.actor.q_2(s,a) # to be updated
         
         if self.algo == 'cca':   
-			q_ref_1 = self.actor.q_ref_1(s,a) # to be updated
-			q_ref_2 = self.actor.q_ref_2(s,a) # to be updated
-			
-			q_KL_1 = self.actor.q_KL_1(s,a) # to be updated
-			q_KL_2 = self.actor.q_KL_2(s,a) # to be updated
+        	q_ref_1 = self.actor.q_ref_1(s,a) # to be updated
+        	q_ref_2 = self.actor.q_ref_2(s,a) # to be updated
+        	
+        	q_KL_1 = self.actor.q_KL_1(s,a) # to be updated
+        	q_KL_2 = self.actor.q_KL_2(s,a) # to be updated
         
         # Bellman backup for Q function
         with torch.no_grad():
@@ -327,13 +326,13 @@ class CCA_Trainer:
             q_targ = self.softmin(q1_targ, q2_targ)
             
             if self.algo == 'cca':    
-				q1_ref_targ = self.actor_targ.q_ref_1(s_prim, a_prim_1)
-				q2_ref_targ = self.actor_targ.q_ref_2(s_prim, a_prim_2)
-				q_ref_targ = self.softmin(q1_ref_targ, q2_ref_targ)
-						   
-				q1_KL_targ = self.actor_targ.q_KL_1(s_prim, a_prim_1)
-				q2_KL_targ = self.actor_targ.q_KL_2(s_prim, a_prim_2)
-				q_KL_targ = self.softmin(q1_KL_targ, q2_KL_targ)
+                q1_ref_targ = self.actor_targ.q_ref_1(s_prim, a_prim_1)
+                q2_ref_targ = self.actor_targ.q_ref_2(s_prim, a_prim_2)
+                q_ref_targ = self.softmin(q1_ref_targ, q2_ref_targ)
+                		   
+                q1_KL_targ = self.actor_targ.q_KL_1(s_prim, a_prim_1)
+                q2_KL_targ = self.actor_targ.q_KL_2(s_prim, a_prim_2)
+                q_KL_targ = self.softmin(q1_KL_targ, q2_KL_targ)
             
             if self.algo == 'cca':    
                 backup_ref =  r  +  self.gamma * (1 - done) *  q_ref_targ 
@@ -348,7 +347,8 @@ class CCA_Trainer:
                 backup_2 =  lik_2 + (1 - done_KL)* (1 - self.gamma)/self.prec * TD_err + self.gamma * (1 - done) *  q_targ 
                                                 
             else:
-                backup =  r + self.gamma * (1 - done) * (q_targ - 1 / self.beta * logp_a_prim) # SAC update           
+                backup_1 =  r + self.gamma * (1 - done) * (q_targ - 1 / self.beta * logp_a_prim_1) # SAC update           
+                backup_2 =  r + self.gamma * (1 - done) * (q_targ - 1 / self.beta * logp_a_prim_2) # SAC update           
 
         # MSE loss against Bellman backup  
         if self.algo == 'cca':   
@@ -360,18 +360,18 @@ class CCA_Trainer:
             loss_q2 = 0.5 * ((q_2 - backup_2)**2 ).mean()
             loss_q = loss_q1 + loss_q2 + loss_q1_ref + loss_q2_ref + loss_q1_KL +  loss_q2_KL  
             # Useful info for logging
-			q_info = dict(Q1Vals=q_1.detach().numpy(),
+            q_info = dict(Q1Vals=q_1.detach().numpy(),
 						  Q2Vals=q_2.detach().numpy(),
 						  Q1Vals_ref=q_ref_1.detach().numpy(),
 						  Q2Vals_ref=q_ref_2.detach().numpy(),
 						  Q1Vals_KL=q_KL_1.detach().numpy(),
 						  Q2Vals_KL=q_KL_2.detach().numpy())
         else:
-            loss_q1 = 0.5 * ((q_1 - backup)**2).mean() 
-            loss_q2 = 0.5 * ((q_2 - backup)**2).mean() 
+            loss_q1 = 0.5 * ((q_1 - backup_1)**2).mean() 
+            loss_q2 = 0.5 * ((q_2 - backup_2)**2).mean() 
             loss_q = loss_q1 + loss_q2
             # Useful info for logging
-			q_info = dict(Q1Vals=q_1.detach().numpy(),
+            q_info = dict(Q1Vals=q_1.detach().numpy(),
 						  Q2Vals=q_2.detach().numpy())
 
         
@@ -383,25 +383,25 @@ class CCA_Trainer:
         s = data['obs']
         a, logp_a = self.actor.pi(s)
         if self.algo == 'cca':   
-			q1_pi = self.actor.q_ref_1(s, a)
-			q2_pi = self.actor.q_ref_2(s, a)
-			q_pi = self.softmin(q1_pi, q2_pi)
-			ELBO_1 = self.actor.q_1(s, a)
-			ELBO_2 = self.actor.q_2(s, a)
-			ELBO = self.softmin(ELBO_1 , ELBO_2)
-			
-			a_test, logp_a_test = self.actor.pi_test(s)
-			q1_pi_test = self.actor.q_ref_1(s, a_test)
-			q2_pi_test = self.actor.q_ref_2(s, a_test)
-			q_pi_test = self.softmin(q1_pi_test, q2_pi_test)
-			
-			# Entropy-regularized policy loss
-			loss_pi = (logp_a - self.beta * (q_pi + ELBO)).mean() +  (logp_a_test - self.beta * q_pi_test).mean()
-		else:
-			q1_pi = self.actor.q_1(s, a)
-			q2_pi = self.actor.q_2(s, a)
-			q_pi = self.softmin(q1_pi, q2_pi)
-			loss_pi = (logp_a - self.beta * q_pi).mean()
+            q1_pi = self.actor.q_ref_1(s, a)
+            q2_pi = self.actor.q_ref_2(s, a)
+            q_pi = self.softmin(q1_pi, q2_pi)
+            ELBO_1 = self.actor.q_1(s, a)
+            ELBO_2 = self.actor.q_2(s, a)
+            ELBO = self.softmin(ELBO_1 , ELBO_2)
+            
+            a_test, logp_a_test = self.actor.pi_test(s)
+            q1_pi_test = self.actor.q_ref_1(s, a_test)
+            q2_pi_test = self.actor.q_ref_2(s, a_test)
+            q_pi_test = self.softmin(q1_pi_test, q2_pi_test)
+            
+            # Entropy-regularized policy loss
+            loss_pi = (logp_a - self.beta * (q_pi + ELBO)).mean() +  (logp_a_test - self.beta * q_pi_test).mean()
+        else:
+            q1_pi = self.actor.q_1(s, a)
+            q2_pi = self.actor.q_2(s, a)
+            q_pi = self.softmin(q1_pi, q2_pi)
+            loss_pi = (logp_a - self.beta * q_pi).mean()
         
         # Useful info for logging
         pi_info = dict(LogPi=logp_a.detach().numpy())
@@ -454,7 +454,7 @@ class CCA_Trainer:
             obs, done, ep_ret, ep_len = self.test_env.reset(), False, 0, 0
             while not(done or (ep_len == self.max_ep_len)):
                 # Take deterministic actions at test time (noise_scale=0)
-                obs, r, done, _ = self.test_env.step(self.get_action(obs, deterministic=True, test=False))
+                obs, r, done, _ = self.test_env.step(self.get_action(obs, deterministic=True, test=True))
                 ep_ret += r
                 ep_len += 1
             self.logger.store(TestEpRet=ep_ret, TestEpLen=ep_len)
@@ -509,10 +509,10 @@ class CCA_Trainer:
             if self.t >= self.update_after and self.t % self.update_every == 0:                
                 for _ in range(self.update_every):          
                     if self.algo == 'cca':   
-						state_batch_size = min(self.replay_buffer.size, 1000)   
-						state_batch = self.replay_buffer.sample_batch(state_batch_size)['obs2']
-						self.state_probs = KernelDensity(kernel='gaussian',                                                   
-														 bandwidth=self.bandwidth).fit(state_batch.detach().numpy())               
+                    	state_batch_size = min(self.replay_buffer.size, 1000)   
+                    	state_batch = self.replay_buffer.sample_batch(state_batch_size)['obs2']
+                    	self.state_probs = KernelDensity(kernel='gaussian',                                                   
+                    									 bandwidth=self.bandwidth).fit(state_batch.detach().numpy())               
                     batch = self.replay_buffer.sample_batch(self.batch_size)
                     self.update(data=batch)
 
@@ -526,7 +526,7 @@ class CCA_Trainer:
 
                 # Test the performance of the deterministic version of the agent.
                 if self.algo != 'cca':
-					self.agent.pi_test = deepcopy(self.agent.pi)
+                    self.actor.pi_test = deepcopy(self.actor.pi)
                 self.test_agent()
 
                 # Log info about epoch
@@ -538,14 +538,14 @@ class CCA_Trainer:
                     self.logger.log_tabular('TestEpLen', average_only=True)
                     self.logger.log_tabular('TotalEnvInteracts', self.t)
                     if self.algo == 'cca':   
-						self.logger.log_tabular('LogPObs', with_min_and_max=True)
+                    	self.logger.log_tabular('LogPObs', with_min_and_max=True)
                     self.logger.log_tabular('Q1Vals', with_min_and_max=True)
                     self.logger.log_tabular('Q2Vals', with_min_and_max=True)
                     if self.algo == 'cca':   
-						self.logger.log_tabular('Q1Vals_ref', with_min_and_max=True)
-						self.logger.log_tabular('Q2Vals_ref', with_min_and_max=True)
-						self.logger.log_tabular('Q1Vals_KL', with_min_and_max=True)
-						self.logger.log_tabular('Q2Vals_KL', with_min_and_max=True)
+                    	self.logger.log_tabular('Q1Vals_ref', with_min_and_max=True)
+                    	self.logger.log_tabular('Q2Vals_ref', with_min_and_max=True)
+                    	self.logger.log_tabular('Q1Vals_KL', with_min_and_max=True)
+                    	self.logger.log_tabular('Q2Vals_KL', with_min_and_max=True)
                     self.logger.log_tabular('LogPi', average_only=True)   
                     self.logger.log_tabular('LossPi', average_only=True)
                     self.logger.log_tabular('LossQ', average_only=True)
