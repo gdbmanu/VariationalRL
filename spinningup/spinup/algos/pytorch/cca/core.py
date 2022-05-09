@@ -79,7 +79,7 @@ class MLPQFunction(nn.Module):
     
 class MLPActorCritic(nn.Module):
 
-    def __init__(self, observation_space, action_space, hidden_sizes=(256,256),
+    def __init__(self, observation_space, action_space, hidden_sizes=(32,32),
                  activation=nn.ReLU):
         super().__init__()
 
@@ -89,12 +89,18 @@ class MLPActorCritic(nn.Module):
 
         # build policy and value functions
         self.pi = SquashedGaussianMLPActor(obs_dim, act_dim, hidden_sizes, activation, act_limit)
+        self.pi_test = SquashedGaussianMLPActor(obs_dim, act_dim, hidden_sizes, activation, act_limit)
         self.q_1 = MLPQFunction(obs_dim, act_dim, hidden_sizes, activation)
         self.q_2 = MLPQFunction(obs_dim, act_dim, hidden_sizes, activation)
-        self.q_var_1 = MLPQFunction(obs_dim, act_dim, hidden_sizes, activation)
-        self.q_var_2 = MLPQFunction(obs_dim, act_dim, hidden_sizes, activation)
+        self.q_ref_1 = MLPQFunction(obs_dim, act_dim, hidden_sizes, activation)
+        self.q_ref_2 = MLPQFunction(obs_dim, act_dim, hidden_sizes, activation)
+        self.q_KL_1 = MLPQFunction(obs_dim, act_dim, hidden_sizes, activation)
+        self.q_KL_2 = MLPQFunction(obs_dim, act_dim, hidden_sizes, activation)
 
-    def act(self, obs, deterministic=False):
+    def act(self, obs, deterministic=False, test=False):
         with torch.no_grad():
-            a, _ = self.pi(obs, deterministic, False)
+            if test:
+                a, _ = self.pi_test(obs, deterministic, False)
+            else:
+                a, _ = self.pi(obs, deterministic, False)
             return a.numpy()

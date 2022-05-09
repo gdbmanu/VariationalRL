@@ -71,12 +71,19 @@ class ReplayBuffer:
     
     def last_batch(self, batch_size=32, batch_interval=1000):
         
+        assert batch_size <= batch_interval
+        
         if self.size < batch_interval:
             batch_interval = self.size
         start=self.ptr-batch_interval
+        end = self.ptr-batch_interval + batch_size
+        print(start, end)
         
-        if start>=0:
-            path_slice = slice(start, self.ptr)
+        if start>=0 or (start < 0 and end < 0):
+            if end < 0:
+                start = self.max_size + start
+            path_slice = slice(start, start+batch_size) #self.ptr)
+            print(path_slice)
             batch = dict(obs=self.obs_buf[path_slice],
                          obs2=self.obs2_buf[path_slice],
                          act=self.act_buf[path_slice],
@@ -86,7 +93,7 @@ class ReplayBuffer:
                          ep_len=self.ep_len_buf[path_slice])
         else:
             slice_1 = slice(self.max_size+start, self.max_size)
-            slice_2 = slice(0, self.ptr)
+            slice_2 = slice(0, end) #self.ptr)
             batch = dict(obs=np.concatenate((self.obs_buf[slice_1],self.obs_buf[slice_2])),
                          obs2=np.concatenate((self.obs2_buf[slice_1],self.obs2_buf[slice_2])),
                          act=np.concatenate((self.act_buf[slice_1],self.act_buf[slice_2])),
@@ -96,18 +103,17 @@ class ReplayBuffer:
                          ep_len=np.concatenate((self.ep_len_buf[slice_1],self.ep_len_buf[slice_2])))        
         
         return {k: torch.as_tensor(v, dtype=torch.float32) for k,v in batch.items()}
-
     
-class MaCAO_Trainer:
+class CCA_Trainer:
     
-    def __init__(self, env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, 
+    def __init__(self, env_fn, actor_critic=MLPActorCritic, ac_kwargs=dict(), seed=0, 
         steps_per_epoch=4000, epochs=100, replay_size=int(1e6), gamma=0.99, 
         polyak=0.995, lr=1e-3, beta=10, prec=0.3, batch_size=100, start_steps=10000, 
         update_after=1000, update_every=50, num_test_episodes=10, max_ep_len=1000, 
-        logger_kwargs=dict(), save_freq=1, bandwidth=0.1, do_reward=True, do_KL=True, algo='macao'):
-        
+        logger_kwargs=dict(), save_freq=1, bandwidth=0.1, algo='cca'):
+                
         """
-    Maximum Credit Assignment Occupancy (MaCAO)
+    Concurrent Credit Assignment (CCA)
 
 
     Args:
@@ -126,11 +132,11 @@ class MaCAO_Trainer:
             ===========  ================  ======================================
             ``act``      (batch, act_dim)  | Numpy array of actions for each 
                                            | observation.
-            ``q``       (batch,)           | Tensor containing one current estimate
+            ``q1``       (batch,)          | Tensor containing one current estimate
                                            | of Q* for the provided observations
                                            | and actions. (Critical: make sure to
                                            | flatten this!)
-            ``q_prim``       (batch,)      | Tensor containing the other current 
+            ``q2``       (batch,)          | Tensor containing the other current 
                                            | estimate of Q* for the provided observations
                                            | and actions. (Critical: make sure to
                                            | flatten this!)
@@ -231,25 +237,27 @@ class MaCAO_Trainer:
         for p in self.actor_targ.parameters():
             p.requires_grad = False
 
-
         # Experience buffer
         self.replay_buffer = ReplayBuffer(obs_dim=self.obs_dim, act_dim=self.act_dim, size=replay_size)
 
         # Count variables (protip: try to get a feel for how different size networks behave!)
-        var_counts = tuple(core.count_vars(module) for module in [self.actor.pi, self.actor.q, self.actor.q_prim])
-        self.logger.log('\nNumber of parameters: \t pi: %d, \t q: %d, %d\n'%var_counts)        
+        var_counts = tuple(count_vars(module) for module in [self.actor.pi, self.actor.pi_test,
+                                                             self.actor.q_1, self.actor.q_2, 
+                                                             self.actor.q_ref_1, self.actor.q_ref_2,
+                                                             self.actor.q_KL_1, self.actor.q_KL_2])
+        self.logger.log('\nNumber of parameters: \t pi: %d %d, \t q: %d, %d, %d, %d, %d, %d\n'%var_counts)        
         
         self.batch_size = batch_size
         
         # List of parameters for both Q-networks (save this for convenience)
+        self.q_params = itertools.chain(self.actor.q_1.parameters(), self.actor.q_2.parameters(), 
+                                        self.actor.q_ref_1.parameters(), self.actor.q_ref_2.parameters(),
+                                        self.actor.q_KL_1.parameters(), self.actor.q_KL_2.parameters())
         
-        if self.algo == 'macao':        
-            self.q_params = itertools.chain(self.actor.q_1.parameters(), self.actor.q_2.parameters(), 
-                                        self.actor.q_var_1.parameters(), self.actor.q_var_2.parameters())
-        else:
-            self.q_params = itertools.chain(self.actor.q_1.parameters(), self.actor.q_2.parameters())  
+        self.pi_params = itertools.chain(self.actor.pi.parameters(), self.actor.pi_test.parameters()) 
+        
         # Set up optimizers for policy and q-function
-        self.pi_optimizer = Adam(self.actor.pi.parameters(), lr=self.lr)
+        self.pi_optimizer = Adam(self.pi_params, lr=self.lr)
         self.q_optimizer = Adam(self.q_params, lr=self.lr)
 
         # Set up model saving
@@ -265,17 +273,17 @@ class MaCAO_Trainer:
         self.update_every = update_every
         self.save_freq = save_freq
         
-        self.do_reward = do_reward
-        self.do_KL = do_KL
         self.bandwidth=bandwidth
         self.algo=algo
+        
     
+    INV_TMP_SOFTMIN = 1
     def softmin(self, q1, q2):
         q_cat = torch.cat((q1.unsqueeze(1), 
                            q2.unsqueeze(1)), 
                            dim=1)
         with torch.no_grad():
-            p_q = F.softmin(q_cat, dim=1) 
+            p_q = F.softmin(INV_TMP_SOFTMIN * q_cat, dim=1) 
             #p_q = torch.clamp(p_q, 0, 1)           
             i_q = Categorical(p_q).sample().detach().numpy()
             idx = np.array((np.arange(self.batch_size), i_q))
@@ -289,73 +297,84 @@ class MaCAO_Trainer:
         q_1 = self.actor.q_1(s,a) # to be updated
         q_2 = self.actor.q_2(s,a) # to be updated
         
-        if self.algo == 'macao':  
-            q_var_1 = self.actor.q_var_1(s,a) # to be updated
-            q_var_2 = self.actor.q_var_2(s,a) # to be updated
+        if self.algo == 'cca':   
+			q_ref_1 = self.actor.q_ref_1(s,a) # to be updated
+			q_ref_2 = self.actor.q_ref_2(s,a) # to be updated
+			
+			q_KL_1 = self.actor.q_KL_1(s,a) # to be updated
+			q_KL_2 = self.actor.q_KL_2(s,a) # to be updated
         
         # Bellman backup for Q function
         with torch.no_grad():
             # Target actions come from *current* policy
-            a_prim, logp_a_prim = self.actor.pi(s_prim)     
-            # logp_a_prim_c = logp_a_prim - torch.mean(logp_a_prim)
+            a_prim_1, logp_a_prim_1 = self.actor.pi(s_prim)     
+            a_prim_2, logp_a_prim_2 = self.actor.pi(s_prim)     
             
             # (uniform) KL drive
-            if self.algo == 'macao':             
+            if self.algo == 'cca':          
                 log_p_obs_np = self.state_probs.score_samples(s_prim.detach().numpy())
                 log_p_obs = torch.as_tensor(log_p_obs_np, dtype=torch.float32)
                 log_p_info = dict(LogPObs=log_p_obs.detach().numpy())
                 log_p_obs_c = log_p_obs - torch.mean(log_p_obs)
-                TD_err =  - int(self.do_KL) * (1 - self.gamma)/self.beta * log_p_obs_c
+                TD_err =  - 1 / self.beta * log_p_obs_c
                 done_KL = torch.max(done, torch.as_tensor(ep_len == self.max_ep_len, dtype=torch.float32))
             else:
                 log_p_info = dict(LogPObs=None)
-                
+                            
             # Target Q-values
-            q1_targ = self.actor_targ.q_1(s_prim, a_prim)
-            q2_targ = self.actor_targ.q_2(s_prim, a_prim)
+            q1_targ = self.actor_targ.q_1(s_prim, a_prim_1)
+            q2_targ = self.actor_targ.q_2(s_prim, a_prim_2)
             q_targ = self.softmin(q1_targ, q2_targ)
             
-            if self.algo == 'macao':    
-                q1_var_targ = self.actor_targ.q_var_1(s_prim, a_prim)
-                q2_var_targ = self.actor_targ.q_var_2(s_prim, a_prim)
-                q_var_targ = self.softmin(q1_var_targ, q2_var_targ)
-               
-                pred_r1 = self.actor.q_1(s,a) - self.gamma * (1 - done) *  self.actor.q_1(s_prim,a_prim)
-                adv_1 = int(self.do_reward) * r -  pred_r1
-                backup_ref_1 = adv_1 +  self.gamma * (1 - done) *  q_targ 
-                pred_r2 = self.actor.q_2(s,a) - self.gamma * (1 - done) *  self.actor.q_2(s_prim,a_prim)
-                adv_2 = int(self.do_reward) * r -  pred_r2
-                backup_ref_2 = adv_2 +  self.gamma * (1 - done) *  q_targ               
+            if self.algo == 'cca':    
+				q1_ref_targ = self.actor_targ.q_ref_1(s_prim, a_prim_1)
+				q2_ref_targ = self.actor_targ.q_ref_2(s_prim, a_prim_2)
+				q_ref_targ = self.softmin(q1_ref_targ, q2_ref_targ)
+						   
+				q1_KL_targ = self.actor_targ.q_KL_1(s_prim, a_prim_1)
+				q2_KL_targ = self.actor_targ.q_KL_2(s_prim, a_prim_2)
+				q_KL_targ = self.softmin(q1_KL_targ, q2_KL_targ)
+            
+            if self.algo == 'cca':    
+                backup_ref =  r  +  self.gamma * (1 - done) *  q_ref_targ 
                 
-                backup_PG_1 =  (1 - done_KL)/self.prec * TD_err + self.gamma * (1 - done) *  q_var_targ               
-                backup_PG_2 =  (1 - done_KL)/self.prec * TD_err + self.gamma * (1 - done) *  q_var_targ
+                backup_KL =  (1 - done_KL) * TD_err + self.gamma * (1 - done) *  q_KL_targ
+                                
+                diff_1 = q_ref_1 - backup_ref
+                diff_2 = q_ref_2 - backup_ref
+                lik_1 = - 0.5 * (1-self.gamma) * diff_1**2 
+                lik_2 = - 0.5 * (1-self.gamma) * diff_2**2 
+                backup_1 =  lik_1 + (1 - done_KL)* (1 - self.gamma)/self.prec * TD_err + self.gamma * (1 - done) *  q_targ
+                backup_2 =  lik_2 + (1 - done_KL)* (1 - self.gamma)/self.prec * TD_err + self.gamma * (1 - done) *  q_targ 
+                                                
             else:
-                backup =  int(self.do_reward) * r + self.gamma * (1 - done) * (q_targ - 1 / self.beta * logp_a_prim) # SAC update           
+                backup =  r + self.gamma * (1 - done) * (q_targ - 1 / self.beta * logp_a_prim) # SAC update           
 
         # MSE loss against Bellman backup  
-        if self.algo != 'sac':  
-            if self.algo == 'baseline':
-                loss_q1 = 0.5  * ((q1 - backup_ref_1)**2).mean() 
-                loss_q2 = 0.5  * ((q2 - backup_ref_2)**2).mean() 
-                loss_q = loss_q1 + loss_q2
-                q_info = dict(Q1Vals=q_1.detach().numpy(),
-                          Q2Vals=q_2.detach().numpy())
-            else:
-                loss_q1 = 0.5 * ((q_1 - backup_ref_1)**2).mean() 
-                loss_q2 = 0.5 * ((q_2 - backup_ref_2)**2).mean() 
-                loss_q1_var = 0.5 * ((q_var_1 - backup_PG_1)**2).mean() 
-                loss_q2_var = 0.5 * ((q_var_2 - backup_PG_2)**2).mean() 
-                loss_q = loss_q1 + loss_q2 + loss_q1_var + loss_q2_var 
-                q_info = dict(Q1Vals=q_1.detach().numpy(),
-                              Q2Vals=q_2.detach().numpy(),
-                              Q1Vals_var=q_var_1.detach().numpy(),
-                              Q2Vals_var=q_var_2.detach().numpy())
+        if self.algo == 'cca':   
+            loss_q1_ref = 0.5 * ((q_ref_1 - backup_ref)**2).mean() 
+            loss_q2_ref = 0.5 * ((q_ref_2 - backup_ref)**2).mean() 
+            loss_q1_KL = 0.5 * ((q_KL_1 - backup_KL)**2).mean() 
+            loss_q2_KL = 0.5 * ((q_KL_2 - backup_KL)**2).mean() 
+            loss_q1 = 0.5 * ((q_1 - backup_1)**2 ).mean() 
+            loss_q2 = 0.5 * ((q_2 - backup_2)**2 ).mean()
+            loss_q = loss_q1 + loss_q2 + loss_q1_ref + loss_q2_ref + loss_q1_KL +  loss_q2_KL  
+            # Useful info for logging
+			q_info = dict(Q1Vals=q_1.detach().numpy(),
+						  Q2Vals=q_2.detach().numpy(),
+						  Q1Vals_ref=q_ref_1.detach().numpy(),
+						  Q2Vals_ref=q_ref_2.detach().numpy(),
+						  Q1Vals_KL=q_KL_1.detach().numpy(),
+						  Q2Vals_KL=q_KL_2.detach().numpy())
         else:
-            loss_q1 = 0.5 * ((q1 - backup)**2).mean() 
-            loss_q2 = 0.5 * ((q2 - backup)**2).mean() 
+            loss_q1 = 0.5 * ((q_1 - backup)**2).mean() 
+            loss_q2 = 0.5 * ((q_2 - backup)**2).mean() 
             loss_q = loss_q1 + loss_q2
-            q_info = dict(Q1Vals=q_1.detach().numpy(),
-                          Q2Vals=q_2.detach().numpy())
+            # Useful info for logging
+			q_info = dict(Q1Vals=q_1.detach().numpy(),
+						  Q2Vals=q_2.detach().numpy())
+
+        
         
         return loss_q, q_info, log_p_info
     
@@ -363,17 +382,27 @@ class MaCAO_Trainer:
     def compute_loss_pi(self, data):
         s = data['obs']
         a, logp_a = self.actor.pi(s)
-        q1_pi = self.actor.q_1(s, a)
-        q2_pi = self.actor.q_2(s, a)
-        q_pi = self.softmin(q1_pi, q2_pi)
-        if self.algo == 'macao':    
-            q1_var = self.actor.q_var_1(s, a)
-            q2_var = self.actor.q_var_2(s, a)
-            q_var = self.softmin(q1_var, q2_var)
-            # Entropy-regularized policy loss
-            loss_pi = (logp_a - self.beta * (q_pi + q_var)).mean()
-        else:
-            loss_pi = (logp_a - self.beta * q_pi).mean()
+        if self.algo == 'cca':   
+			q1_pi = self.actor.q_ref_1(s, a)
+			q2_pi = self.actor.q_ref_2(s, a)
+			q_pi = self.softmin(q1_pi, q2_pi)
+			ELBO_1 = self.actor.q_1(s, a)
+			ELBO_2 = self.actor.q_2(s, a)
+			ELBO = self.softmin(ELBO_1 , ELBO_2)
+			
+			a_test, logp_a_test = self.actor.pi_test(s)
+			q1_pi_test = self.actor.q_ref_1(s, a_test)
+			q2_pi_test = self.actor.q_ref_2(s, a_test)
+			q_pi_test = self.softmin(q1_pi_test, q2_pi_test)
+			
+			# Entropy-regularized policy loss
+			loss_pi = (logp_a - self.beta * (q_pi + ELBO)).mean() +  (logp_a_test - self.beta * q_pi_test).mean()
+		else:
+			q1_pi = self.actor.q_1(s, a)
+			q2_pi = self.actor.q_2(s, a)
+			q_pi = self.softmin(q1_pi, q2_pi)
+			loss_pi = (logp_a - self.beta * q_pi).mean()
+        
         # Useful info for logging
         pi_info = dict(LogPi=logp_a.detach().numpy())
         
@@ -417,15 +446,15 @@ class MaCAO_Trainer:
                 p_targ.data.mul_(self.polyak)
                 p_targ.data.add_((1 - self.polyak) * p.data)
             
-    def get_action(self, obs, deterministic=False):
-        return self.actor.act(torch.as_tensor(obs, dtype=torch.float32), deterministic)     
+    def get_action(self, obs, deterministic=False, test=False):
+        return self.actor.act(torch.as_tensor(obs, dtype=torch.float32), deterministic, test)     
 
     def test_agent(self):
         for j in range(self.num_test_episodes):
             obs, done, ep_ret, ep_len = self.test_env.reset(), False, 0, 0
             while not(done or (ep_len == self.max_ep_len)):
                 # Take deterministic actions at test time (noise_scale=0)
-                obs, r, done, _ = self.test_env.step(self.get_action(obs, deterministic=True))
+                obs, r, done, _ = self.test_env.step(self.get_action(obs, deterministic=True, test=False))
                 ep_ret += r
                 ep_len += 1
             self.logger.store(TestEpRet=ep_ret, TestEpLen=ep_len)
@@ -461,7 +490,11 @@ class MaCAO_Trainer:
             done = False if ep_len==self.max_ep_len else done
 
             # Store experience to replay buffer
-            self.replay_buffer.store(s, a, r, s_prim, done, ep_len)
+            if False: #self.t > self.update_after:
+                log_p_obs = self.state_probs.score_samples([s_prim])[0]
+            else:
+                log_p_obs = 0
+            self.replay_buffer.store(s, a, r, log_p_obs, s_prim, done, ep_len)
 
             # Super critical, easy to overlook step: make sure to update 
             # most recent observation!
@@ -475,13 +508,11 @@ class MaCAO_Trainer:
             # Update handling
             if self.t >= self.update_after and self.t % self.update_every == 0:                
                 for _ in range(self.update_every):          
-                    state_batch_size = min(self.replay_buffer.size, 1000)   
-                    #state_batch = self.replay_buffer.last_obs_2(batch_size=state_batch_size, 
-                    #                                            batch_interval=10000)
-                    state_batch = self.replay_buffer.sample_batch(state_batch_size)['obs2']
-                    #self.state_probs = KNN_prob(state_batch.detach().numpy())
-                    self.state_probs = KernelDensity(kernel='gaussian',                                                   
-                                                     bandwidth=self.bandwidth).fit(state_batch.detach().numpy())
+                    if self.algo == 'cca':   
+						state_batch_size = min(self.replay_buffer.size, 1000)   
+						state_batch = self.replay_buffer.sample_batch(state_batch_size)['obs2']
+						self.state_probs = KernelDensity(kernel='gaussian',                                                   
+														 bandwidth=self.bandwidth).fit(state_batch.detach().numpy())               
                     batch = self.replay_buffer.sample_batch(self.batch_size)
                     self.update(data=batch)
 
@@ -494,6 +525,8 @@ class MaCAO_Trainer:
                     self.logger.save_state({'env': self.env}, None)
 
                 # Test the performance of the deterministic version of the agent.
+                if self.algo != 'cca':
+					self.agent.pi_test = deepcopy(self.agent.pi)
                 self.test_agent()
 
                 # Log info about epoch
@@ -504,12 +537,15 @@ class MaCAO_Trainer:
                     self.logger.log_tabular('EpLen', average_only=True)
                     self.logger.log_tabular('TestEpLen', average_only=True)
                     self.logger.log_tabular('TotalEnvInteracts', self.t)
-                    self.logger.log_tabular('LogPObs', with_min_and_max=True)
+                    if self.algo == 'cca':   
+						self.logger.log_tabular('LogPObs', with_min_and_max=True)
                     self.logger.log_tabular('Q1Vals', with_min_and_max=True)
                     self.logger.log_tabular('Q2Vals', with_min_and_max=True)
-                    if self.algo == 'macao':
-                        self.logger.log_tabular('Q1Vals_var', with_min_and_max=True)
-                        self.logger.log_tabular('Q2Vals_var', with_min_and_max=True)
+                    if self.algo == 'cca':   
+						self.logger.log_tabular('Q1Vals_ref', with_min_and_max=True)
+						self.logger.log_tabular('Q2Vals_ref', with_min_and_max=True)
+						self.logger.log_tabular('Q1Vals_KL', with_min_and_max=True)
+						self.logger.log_tabular('Q2Vals_KL', with_min_and_max=True)
                     self.logger.log_tabular('LogPi', average_only=True)   
                     self.logger.log_tabular('LossPi', average_only=True)
                     self.logger.log_tabular('LossQ', average_only=True)
@@ -518,14 +554,14 @@ class MaCAO_Trainer:
                     
             self.t += 1
 
-def macao(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), 
+def cca(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), 
         logger_kwargs=dict(), seed=0, 
         steps_per_epoch=4000, epochs=100, replay_size=int(1e6), gamma=0.99, 
         polyak=0.995, lr=1e-3, beta=10, prec=0.3, batch_size=100, start_steps=10000, 
         update_after=1000, update_every=50, num_test_episodes=10, max_ep_len=1000, 
-          save_freq=1, do_reward=True, bandwidth=0.1, algo='macao'):
+        save_freq=1, bandwidth=0.1, algo='cca'):
             
-    trainer = MaCAO_Trainer(env_fn=env_fn, 
+    trainer = CCA_Trainer(env_fn=env_fn, 
                             actor_critic=actor_critic,
                        ac_kwargs=ac_kwargs, 
                        logger_kwargs=logger_kwargs,
@@ -540,8 +576,6 @@ def macao(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(),
                        beta=beta,
                        prec=prec,
                        replay_size = replay_size,
-                       do_reward=do_reward,
-                       do_KL=do_KL,
                        batch_size=batch_size,
                        bandwidth=bandwidth,
                        algo=algo)
@@ -552,9 +586,7 @@ def macao(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(),
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--algo', type=str, default='macao') # 'macao', 'sac', 'baseline'
-    parser.add_argument('--do_reward', type=bool, default=True)
-    parser.add_argument('--do_KL', type=bool, default=True)
+    parser.add_argument('--algo', type=str, default='cca') # 'cca', 'sac'
     parser.add_argument('--env', type=str, default='HalfCheetah-v2')
     parser.add_argument('--seed', '-s', type=int, default=0)
     parser.add_argument('--hid', type=int, default=256)
@@ -571,7 +603,7 @@ if __name__ == '__main__':
     parser.add_argument('--max_ep_len', type=int, default=1000)
     parser.add_argument('--replay_size', type=int, default=int(1e6))
     parser.add_argument('--batch_size', type=int, default=100)
-    parser.add_argument('--exp_name', type=str, default='macao')
+    parser.add_argument('--exp_name', type=str, default='cca')
     args = parser.parse_args()
     
     from spinup.utils.run_utils import setup_logger_kwargs
@@ -584,5 +616,5 @@ if __name__ == '__main__':
     
     env_fn = lambda : gym.make(args.env)
     
-    macao( env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=ac_kwargs, logger_kwargs=logger_kwargs, **args)
+    cca( env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=ac_kwargs, logger_kwargs=logger_kwargs, **args)
 

@@ -18,6 +18,8 @@ from spinup.algos.pytorch.td3.td3 import td3 as td3_pytorch
 from spinup.algos.pytorch.trpo.trpo import trpo as trpo_pytorch
 from spinup.algos.pytorch.vpg.vpg import vpg as vpg_pytorch
 from spinup.algos.pytorch.macao.macao import macao as macao_pytorch
+from spinup.algos.pytorch.cca.cca import cca as cca_pytorch
+
 
 # Loggers
 from spinup.utils.logx import Logger, EpochLogger

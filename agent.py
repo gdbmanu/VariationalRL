@@ -343,13 +343,13 @@ class Agent:
             return act_score / np.sum(act_score)
 
     def greedy_act_max(self, Q):
-        if np.abs(np.max(Q)) > 1e-6:
+        if np.abs(np.log(Q_obs)) < 300:
             return np.argmax(Q)
         else:
             return None
        
 
-    def epsilon_greedy(self, obs, Q=None, tf=False, actions_set=None, EPS = 0.1):
+    def epsilon_greedy(self, obs, Q=None, tf=False, actions_set=None, EPS = 0.01):
         Q_obs = self.set_Q_obs(obs, Q=Q, tf=tf, actions_set=actions_set)
         act_max = self.greedy_act_max(Q_obs)
         if actions_set is None:
@@ -377,7 +377,7 @@ class Agent:
         return action
 
     def epsilon_greedy_choice(self, obs, actions_set=None):
-        act_probs = self.epsilon_greedy(obs, actions_set=actions_set)
+        act_probs = self.epsilon_greedy(obs, Q=self.Q_ref, actions_set=actions_set)
         if actions_set is None:
             action = np.random.choice(self.N_act, p=act_probs)
         else:
