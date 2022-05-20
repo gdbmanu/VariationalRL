@@ -1,9 +1,9 @@
 #!/bin/csh
 set env_name=walker
 set envir=BipedalWalker-v3
-set BETA_REF=30 # reward amplification
-set k=100 # explo/exploit balance
-set PREC=$k/10
+set BETA_REF=100 # reward amplification
+set k=30 # explo/exploit balance
+set PREC=$k/$BETA_REF
 set do_reward=1
 set gamma=0.99
 set bandwidth=0.03
@@ -16,11 +16,7 @@ set replay_size=1000000 #int(1e6)
 set batch_size=100
 set max_ep_len=1600
 set hid=64
-<<<<<<< HEAD
-nice python3 -m spinup.run macao --seed 1 2 3 4 --hid "[$hid,$hid]" --env $envir --exp_name walker_macao_test --beta $BETA_REF --prec $PREC --gamma $gamma --bandwidth $bandwidth --epochs $epochs --steps_per_epoch $steps_per_epoch --start_steps $start_steps  --update_after $update_after --update_every $update_every --replay_size $replay_size --batch_size $batch_size --max_ep_len $max_ep_len
-=======
-nice python3 -m spinup.run macao --seed 0 1 2 3 4 --hid "[$hid,$hid]" --env $envir --exp_name walker_macao_test2 --beta $BETA_REF --prec $PREC --gamma $gamma --bandwidth $bandwidth --epochs $epochs --steps_per_epoch $steps_per_epoch --start_steps $start_steps  --update_after $update_after --update_every $update_every --replay_size $replay_size --batch_size $batch_size --max_ep_len $max_ep_len&
->>>>>>> 70ffb2e831d3dd8c23b71df804b718660a0e802a
+nice python3 -m spinup.run cca --seed 0 1 2 3 4 --hid "[$hid,$hid]" --env $envir --exp_name walker_cca_test --beta $BETA_REF --prec $PREC --gamma $gamma --bandwidth $bandwidth --epochs $epochs --steps_per_epoch $steps_per_epoch --start_steps $start_steps  --update_after $update_after --update_every $update_every --replay_size $replay_size --batch_size $batch_size --max_ep_len $max_ep_len
 #nice python3 -m spinup.run macao --algo "sac" --seed 0 1 2 3 4 --hid "[$hid,$hid]" --env $envir --exp_name walker_sac_test --beta $BETA_REF --prec $PREC --gamma $gamma --bandwidth $bandwidth --epochs $epochs --steps_per_epoch $steps_per_epoch --start_steps $start_steps  --update_after $update_after --update_every $update_every --replay_size $replay_size --batch_size $batch_size --max_ep_len $max_ep_len&
 #nice python3 -m spinup.run ppo --seed 0 1 2 3 4 --hid "[$hid,$hid]" --env $envir --exp_name walker_ppo_test --gamma $gamma --epochs $epochs --steps_per_epoch $steps_per_epoch --max_ep_len $max_ep_len&
 #nice python3 -m spinup.run td3 --seed 0 1 2 3 4 --hid "[$hid,$hid]" --env $envir --exp_name walker_td3_test --gamma $gamma --epochs $epochs --steps_per_epoch $steps_per_epoch --update_after $update_after --start_steps $start_steps  $steps_per_epoch --update_every $update_every --replay_size $replay_size --batch_size $batch_size --max_ep_len $max_ep_len&
